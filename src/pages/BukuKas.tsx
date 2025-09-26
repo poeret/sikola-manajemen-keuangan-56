@@ -4,6 +4,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DollarSign, Plus, Search, TrendingUp, TrendingDown, Calendar } from "lucide-react";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import {
   Table,
   TableBody,
   TableCell,
@@ -20,6 +36,14 @@ const mockTransaksi = [
 
 export default function BukuKas() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [formData, setFormData] = useState({
+    keterangan: "",
+    jenis: "",
+    nominal: "",
+    tanggal: ""
+  });
+  const { toast } = useToast();
 
   const getJenisColor = (jenis: string) => {
     return jenis === "Pemasukan" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive";
@@ -38,7 +62,7 @@ export default function BukuKas() {
             Catatan seluruh transaksi keuangan sekolah
           </p>
         </div>
-        <Button>
+        <Button onClick={() => setShowAddDialog(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Tambah Transaksi
         </Button>
@@ -136,6 +160,75 @@ export default function BukuKas() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Dialog Tambah Transaksi */}
+      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Tambah Transaksi Kas</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="tanggal">Tanggal</Label>
+              <Input
+                id="tanggal"
+                type="date"
+                value={formData.tanggal}
+                onChange={(e) => setFormData({...formData, tanggal: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="keterangan">Keterangan</Label>
+              <Input
+                id="keterangan"
+                placeholder="Contoh: Penerimaan SPP Siswa"
+                value={formData.keterangan}
+                onChange={(e) => setFormData({...formData, keterangan: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="jenis">Jenis Transaksi</Label>
+              <Select value={formData.jenis} onValueChange={(value) => setFormData({...formData, jenis: value})}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih jenis transaksi" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Pemasukan">Pemasukan</SelectItem>
+                  <SelectItem value="Pengeluaran">Pengeluaran</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="nominal">Nominal</Label>
+              <Input
+                id="nominal"
+                type="number"
+                placeholder="0"
+                value={formData.nominal}
+                onChange={(e) => setFormData({...formData, nominal: e.target.value})}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowAddDialog(false)}>
+                Batal
+              </Button>
+              <Button 
+                onClick={() => {
+                  toast({
+                    title: "Transaksi Berhasil Ditambah",
+                    description: "Transaksi kas baru telah berhasil dicatat.",
+                  });
+                  setFormData({ keterangan: "", jenis: "", nominal: "", tanggal: "" });
+                  setShowAddDialog(false);
+                }}
+                disabled={!formData.keterangan || !formData.jenis || !formData.nominal || !formData.tanggal}
+              >
+                Simpan
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -4,6 +4,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FolderOpen, Plus, Search, Edit, Trash2 } from "lucide-react";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import {
   Table,
   TableBody,
   TableCell,
@@ -20,6 +36,14 @@ const mockKategori = [
 
 export default function KategoriKeuangan() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [formData, setFormData] = useState({
+    kode: "",
+    nama: "",
+    jenis: "",
+    deskripsi: ""
+  });
+  const { toast } = useToast();
 
   const getJenisColor = (jenis: string) => {
     return jenis === "Pemasukan" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive";
@@ -34,7 +58,7 @@ export default function KategoriKeuangan() {
             Kelola kategori pemasukan dan pengeluaran
           </p>
         </div>
-        <Button>
+        <Button onClick={() => setShowAddDialog(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Tambah Kategori
         </Button>
@@ -87,10 +111,28 @@ export default function KategoriKeuangan() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="sm">
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => {
+                          toast({
+                            title: "Edit Kategori",
+                            description: `Mengedit kategori ${kategori.nama}`,
+                          });
+                        }}
+                      >
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="sm">
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => {
+                          toast({
+                            title: "Hapus Kategori",
+                            description: `Kategori ${kategori.nama} telah dihapus`,
+                          });
+                        }}
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -101,6 +143,74 @@ export default function KategoriKeuangan() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Dialog Tambah Kategori */}
+      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Tambah Kategori Keuangan</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="kode">Kode Kategori</Label>
+              <Input
+                id="kode"
+                placeholder="Contoh: PEN-001"
+                value={formData.kode}
+                onChange={(e) => setFormData({...formData, kode: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="nama">Nama Kategori</Label>
+              <Input
+                id="nama"
+                placeholder="Contoh: Penerimaan SPP"
+                value={formData.nama}
+                onChange={(e) => setFormData({...formData, nama: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="jenis">Jenis</Label>
+              <Select value={formData.jenis} onValueChange={(value) => setFormData({...formData, jenis: value})}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih jenis kategori" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Pemasukan">Pemasukan</SelectItem>
+                  <SelectItem value="Pengeluaran">Pengeluaran</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="deskripsi">Deskripsi</Label>
+              <Textarea
+                id="deskripsi"
+                placeholder="Deskripsi kategori..."
+                value={formData.deskripsi}
+                onChange={(e) => setFormData({...formData, deskripsi: e.target.value})}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowAddDialog(false)}>
+                Batal
+              </Button>
+              <Button 
+                onClick={() => {
+                  toast({
+                    title: "Kategori Berhasil Ditambah",
+                    description: "Kategori keuangan baru telah berhasil ditambahkan.",
+                  });
+                  setFormData({ kode: "", nama: "", jenis: "", deskripsi: "" });
+                  setShowAddDialog(false);
+                }}
+                disabled={!formData.kode || !formData.nama || !formData.jenis}
+              >
+                Simpan
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

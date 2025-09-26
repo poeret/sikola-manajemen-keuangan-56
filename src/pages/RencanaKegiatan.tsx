@@ -4,6 +4,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PlusCircle, Plus, Search, Edit, Trash2, Calendar } from "lucide-react";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import {
   Table,
   TableBody,
   TableCell,
@@ -20,6 +35,14 @@ const mockRencana = [
 
 export default function RencanaKegiatan() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [formData, setFormData] = useState({
+    kegiatan: "",
+    anggaran: "",
+    tanggal: "",
+    kategori: ""
+  });
+  const { toast } = useToast();
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -43,7 +66,7 @@ export default function RencanaKegiatan() {
             Kelola rencana kegiatan dan anggaran sekolah
           </p>
         </div>
-        <Button>
+        <Button onClick={() => setShowAddDialog(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Tambah Rencana
         </Button>
@@ -97,10 +120,28 @@ export default function RencanaKegiatan() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="sm">
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => {
+                          toast({
+                            title: "Edit Rencana",
+                            description: `Mengedit ${rencana.kegiatan}`,
+                          });
+                        }}
+                      >
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="sm">
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => {
+                          toast({
+                            title: "Hapus Rencana",
+                            description: `${rencana.kegiatan} telah dihapus`,
+                          });
+                        }}
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -111,6 +152,76 @@ export default function RencanaKegiatan() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Dialog Tambah Rencana */}
+      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Tambah Rencana Kegiatan</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="kegiatan">Nama Kegiatan</Label>
+              <Input
+                id="kegiatan"
+                placeholder="Contoh: Pembelian Peralatan Lab"
+                value={formData.kegiatan}
+                onChange={(e) => setFormData({...formData, kegiatan: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="anggaran">Anggaran</Label>
+              <Input
+                id="anggaran"
+                type="number"
+                placeholder="0"
+                value={formData.anggaran}
+                onChange={(e) => setFormData({...formData, anggaran: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tanggal">Tanggal Rencana</Label>
+              <Input
+                id="tanggal"
+                type="date"
+                value={formData.tanggal}
+                onChange={(e) => setFormData({...formData, tanggal: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="kategori">Kategori</Label>
+              <Select value={formData.kategori} onValueChange={(value) => setFormData({...formData, kategori: value})}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Pilih kategori" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Operasional">Operasional</SelectItem>
+                  <SelectItem value="Infrastruktur">Infrastruktur</SelectItem>
+                  <SelectItem value="Kesiswaan">Kesiswaan</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowAddDialog(false)}>
+                Batal
+              </Button>
+              <Button 
+                onClick={() => {
+                  toast({
+                    title: "Rencana Berhasil Ditambah",
+                    description: "Rencana kegiatan baru telah berhasil ditambahkan.",
+                  });
+                  setFormData({ kegiatan: "", anggaran: "", tanggal: "", kategori: "" });
+                  setShowAddDialog(false);
+                }}
+                disabled={!formData.kegiatan || !formData.anggaran || !formData.tanggal || !formData.kategori}
+              >
+                Simpan
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

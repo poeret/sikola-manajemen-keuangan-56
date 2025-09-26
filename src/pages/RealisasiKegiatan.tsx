@@ -4,6 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Calculator, Plus, Search, Edit, Trash2, Calendar, CheckCircle } from "lucide-react";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
+import {
   Table,
   TableBody,
   TableCell,
@@ -20,6 +29,14 @@ const mockRealisasi = [
 
 export default function RealisasiKegiatan() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [formData, setFormData] = useState({
+    kegiatan: "",
+    realisasi: "",
+    tanggal: "",
+    catatan: ""
+  });
+  const { toast } = useToast();
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -45,7 +62,7 @@ export default function RealisasiKegiatan() {
             Pantau realisasi anggaran dan pelaksanaan kegiatan
           </p>
         </div>
-        <Button>
+        <Button onClick={() => setShowAddDialog(true)}>
           <Plus className="mr-2 h-4 w-4" />
           Tambah Realisasi
         </Button>
@@ -104,10 +121,28 @@ export default function RealisasiKegiatan() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="sm">
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => {
+                          toast({
+                            title: "Edit Realisasi",
+                            description: `Mengedit ${realisasi.kegiatan}`,
+                          });
+                        }}
+                      >
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="sm">
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => {
+                          toast({
+                            title: "Hapus Realisasi",
+                            description: `${realisasi.kegiatan} telah dihapus`,
+                          });
+                        }}
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -118,6 +153,72 @@ export default function RealisasiKegiatan() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Dialog Tambah Realisasi */}
+      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Tambah Realisasi Kegiatan</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="kegiatan">Nama Kegiatan</Label>
+              <Input
+                id="kegiatan"
+                placeholder="Contoh: Pembelian Peralatan Lab"
+                value={formData.kegiatan}
+                onChange={(e) => setFormData({...formData, kegiatan: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="realisasi">Realisasi Anggaran</Label>
+              <Input
+                id="realisasi"
+                type="number"
+                placeholder="0"
+                value={formData.realisasi}
+                onChange={(e) => setFormData({...formData, realisasi: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tanggal">Tanggal Realisasi</Label>
+              <Input
+                id="tanggal"
+                type="date"
+                value={formData.tanggal}
+                onChange={(e) => setFormData({...formData, tanggal: e.target.value})}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="catatan">Catatan</Label>
+              <Textarea
+                id="catatan"
+                placeholder="Catatan realisasi kegiatan..."
+                value={formData.catatan}
+                onChange={(e) => setFormData({...formData, catatan: e.target.value})}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowAddDialog(false)}>
+                Batal
+              </Button>
+              <Button 
+                onClick={() => {
+                  toast({
+                    title: "Realisasi Berhasil Ditambah",
+                    description: "Realisasi kegiatan baru telah berhasil ditambahkan.",
+                  });
+                  setFormData({ kegiatan: "", realisasi: "", tanggal: "", catatan: "" });
+                  setShowAddDialog(false);
+                }}
+                disabled={!formData.kegiatan || !formData.realisasi || !formData.tanggal}
+              >
+                Simpan
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

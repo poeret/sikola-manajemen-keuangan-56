@@ -4,6 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TrendingUp, Search, ArrowUp, CheckCircle } from "lucide-react";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import {
   Table,
   TableBody,
   TableCell,
@@ -20,6 +27,8 @@ const mockKenaikan = [
 
 export default function KenaikanKelas() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [showKenaikanDialog, setShowKenaikanDialog] = useState(false);
+  const { toast } = useToast();
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -43,7 +52,7 @@ export default function KenaikanKelas() {
             Kelola proses kenaikan kelas siswa
           </p>
         </div>
-        <Button>
+        <Button onClick={() => setShowKenaikanDialog(true)}>
           <CheckCircle className="mr-2 h-4 w-4" />
           Proses Kenaikan
         </Button>
@@ -96,7 +105,16 @@ export default function KenaikanKelas() {
                     </span>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm">
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => {
+                        toast({
+                          title: "Detail Siswa",
+                          description: `Menampilkan detail untuk ${siswa.nama}`,
+                        });
+                      }}
+                    >
                       Detail
                     </Button>
                   </TableCell>
@@ -106,6 +124,34 @@ export default function KenaikanKelas() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Dialog Proses Kenaikan */}
+      <Dialog open={showKenaikanDialog} onOpenChange={setShowKenaikanDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Proses Kenaikan Kelas</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p>Apakah Anda yakin ingin memproses kenaikan kelas untuk semua siswa yang berstatus "Naik"?</p>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowKenaikanDialog(false)}>
+                Batal
+              </Button>
+              <Button 
+                onClick={() => {
+                  toast({
+                    title: "Kenaikan Kelas Berhasil",
+                    description: "Proses kenaikan kelas telah berhasil dilakukan.",
+                  });
+                  setShowKenaikanDialog(false);
+                }}
+              >
+                Proses
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
