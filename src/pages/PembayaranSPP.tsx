@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -37,86 +37,112 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
-// Mock data
-const mockSiswa = {
-  nis: "20240001",
-  nama: "Ahmad Fauzi Rahman",
-  kelas: "XII RPL 1",
-  foto: null,
-  tunggakanTahunSebelumnya: 2500000,
-  tagihanTahunIni: 4800000,
-  totalTagihan: 7300000
-};
+interface SiswaData {
+  id: string;
+  nis: string;
+  name: string;
+  class_id: string | null;
+}
 
-const mockTagihan = [
-  {
-    id: 1,
-    nama: "SPP Januari 2024",
-    periode: "Januari 2024",
-    nominal: 400000,
-    status: "Lunas",
-    tanggalBayar: "2024-01-05"
-  },
-  {
-    id: 2,
-    nama: "SPP Februari 2024", 
-    periode: "Februari 2024",
-    nominal: 400000,
-    status: "Lunas",
-    tanggalBayar: "2024-02-05"
-  },
-  {
-    id: 3,
-    nama: "SPP Maret 2024",
-    periode: "Maret 2024", 
-    nominal: 400000,
-    status: "Belum Lunas",
-    tanggalBayar: null
-  },
-  {
-    id: 4,
-    nama: "SPP April 2024",
-    periode: "April 2024",
-    nominal: 400000, 
-    status: "Belum Lunas",
-    tanggalBayar: null
-  },
-  {
-    id: 5,
-    nama: "Uang Praktik",
-    periode: "2024/2025",
-    nominal: 1200000,
-    status: "Bayar Sebagian",
-    tanggalBayar: "2024-01-15"
-  },
-  {
-    id: 6,
-    nama: "Uang Seragam",
-    periode: "2024/2025", 
-    nominal: 800000,
-    status: "Belum Lunas",
-    tanggalBayar: null
-  }
-];
+interface TagihanData {
+  id: string;
+  name: string;
+  amount: number;
+  due_date: string | null;
+  status: string | null;
+}
 
 export default function PembayaranSPP() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedSiswa, setSelectedSiswa] = useState<typeof mockSiswa | null>(null);
-  const [selectedTagihan, setSelectedTagihan] = useState<number[]>([]);
+  const [siswa, setSiswa] = useState<SiswaData[]>([]);
+  const [tagihan, setTagihan] = useState<TagihanData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedSiswa, setSelectedSiswa] = useState<SiswaData | null>(null);
+  const [selectedTagihan, setSelectedTagihan] = useState<string[]>([]);
   const [jumlahBayar, setJumlahBayar] = useState("");
   const [metodePembayaran, setMetodePembayaran] = useState("");
+  const { toast } = useToast();
+
+  // Load data from database
+  useEffect(() => {
+    loadSiswa();
+    loadTagihan();
+  }, []);
+
+  const loadSiswa = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('students')
+        .select('id, nis, name, class_id')
+        .order('name', { ascending: true });
+
+      if (error) {
+        console.error('Error loading students:', error);
+        toast({
+          title: "Error",
+          description: "Gagal memuat data siswa",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      setSiswa(data || []);
+    } catch (error) {
+      console.error('Error loading students:', error);
+      toast({
+        title: "Error",
+        description: "Gagal memuat data siswa",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const loadTagihan = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('bills')
+        .select('id, name, amount, due_date, status')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error loading bills:', error);
+        toast({
+          title: "Error",
+          description: "Gagal memuat data tagihan",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      setTagihan(data || []);
+    } catch (error) {
+      console.error('Error loading bills:', error);
+      toast({
+        title: "Error",
+        description: "Gagal memuat data tagihan",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
   const [catatan, setCatatan] = useState("");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const handleSearch = () => {
     if (searchQuery.trim()) {
-      // Mock search result
-      setSelectedSiswa(mockSiswa);
+      const foundSiswa = siswa.find(s => 
+        s.nis.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        s.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      setSelectedSiswa(foundSiswa || null);
     }
   };
 
-  const handleTagihanChange = (tagihanId: number, checked: boolean) => {
+  const handleTagihanChange = (tagihanId: string, checked: boolean) => {
     if (checked) {
       setSelectedTagihan([...selectedTagihan, tagihanId]);
     } else {
@@ -126,21 +152,68 @@ export default function PembayaranSPP() {
 
   const calculateSelectedTotal = () => {
     return selectedTagihan.reduce((total, id) => {
-      const tagihan = mockTagihan.find(t => t.id === id);
-      return total + (tagihan?.nominal || 0);
+      const tagihanItem = tagihan.find(t => t.id === id);
+      return total + (tagihanItem?.amount || 0);
     }, 0);
   };
 
-  const handlePayment = () => {
-    setShowSuccessModal(true);
-    // Reset form
-    setTimeout(() => {
-      setSelectedTagihan([]);
-      setJumlahBayar("");
-      setMetodePembayaran("");
-      setCatatan("");
-      setShowSuccessModal(false);
-    }, 3000);
+  const handlePayment = async () => {
+    try {
+      // Create payment record
+      const { data: payment, error } = await supabase
+        .from('payments')
+        .insert({
+          student_id: selectedSiswa?.id,
+          amount: parseFloat(jumlahBayar),
+          payment_method: metodePembayaran,
+          notes: catatan,
+          status: 'completed'
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating payment:', error);
+        toast({
+          title: "Error",
+          description: "Gagal memproses pembayaran",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // Update bill status
+      for (const tagihanId of selectedTagihan) {
+        await supabase
+          .from('bills')
+          .update({ status: 'paid' })
+          .eq('id', tagihanId);
+      }
+
+      setShowSuccessModal(true);
+      toast({
+        title: "Berhasil",
+        description: "Pembayaran berhasil diproses"
+      });
+
+      // Reset form
+      setTimeout(() => {
+        setSelectedTagihan([]);
+        setJumlahBayar("");
+        setMetodePembayaran("");
+        setCatatan("");
+        setShowSuccessModal(false);
+        setSelectedSiswa(null);
+        setSearchQuery("");
+      }, 3000);
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      toast({
+        title: "Error",
+        description: "Gagal memproses pembayaran",
+        variant: "destructive"
+      });
+    }
   };
 
   return (
@@ -192,9 +265,9 @@ export default function PembayaranSPP() {
                   <User className="h-8 w-8 text-muted-foreground" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-lg">{selectedSiswa.nama}</h3>
+                  <h3 className="font-semibold text-lg">{selectedSiswa.name}</h3>
                   <p className="text-muted-foreground">NIS: {selectedSiswa.nis}</p>
-                  <p className="text-muted-foreground">Kelas: {selectedSiswa.kelas}</p>
+                  <p className="text-muted-foreground">Kelas: -</p>
                 </div>
               </div>
             </CardContent>
@@ -208,33 +281,23 @@ export default function PembayaranSPP() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex justify-between items-center p-3 bg-destructive/10 rounded-lg">
-                <div>
-                  <p className="text-sm font-medium">Total Tunggakan Tahun Sebelumnya</p>
-                  <p className="text-xs text-muted-foreground">Belum dibayar dari tahun lalu</p>
-                </div>
-                <p className="font-bold text-destructive">
-                  Rp {selectedSiswa.tunggakanTahunSebelumnya.toLocaleString('id-ID')}
-                </p>
-              </div>
-              
               <div className="flex justify-between items-center p-3 bg-primary/10 rounded-lg">
                 <div>
-                  <p className="text-sm font-medium">Total Tagihan Tahun Ini</p>
-                  <p className="text-xs text-muted-foreground">Tagihan tahun ajaran aktif</p>
+                  <p className="text-sm font-medium">Total Tagihan Tersedia</p>
+                  <p className="text-xs text-muted-foreground">Tagihan yang dapat dibayar</p>
                 </div>
                 <p className="font-bold text-primary">
-                  Rp {selectedSiswa.tagihanTahunIni.toLocaleString('id-ID')}
+                  Rp {tagihan.reduce((total, t) => total + t.amount, 0).toLocaleString('id-ID')}
                 </p>
               </div>
               
               <div className="flex justify-between items-center p-4 bg-muted rounded-lg border-2 border-dashed">
                 <div>
-                  <p className="font-semibold">Grand Total Tagihan</p>
-                  <p className="text-xs text-muted-foreground">Total keseluruhan</p>
+                  <p className="font-semibold">Total Tagihan Terpilih</p>
+                  <p className="text-xs text-muted-foreground">Tagihan yang dipilih untuk dibayar</p>
                 </div>
                 <p className="text-xl font-bold">
-                  Rp {selectedSiswa.totalTagihan.toLocaleString('id-ID')}
+                  Rp {calculateSelectedTotal().toLocaleString('id-ID')}
                 </p>
               </div>
             </CardContent>
@@ -261,39 +324,51 @@ export default function PembayaranSPP() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {mockTagihan.map((tagihan) => (
-                  <TableRow key={tagihan.id}>
-                    <TableCell>
-                      {tagihan.status !== "Lunas" && (
-                        <Checkbox
-                          checked={selectedTagihan.includes(tagihan.id)}
-                          onCheckedChange={(checked) => 
-                            handleTagihanChange(tagihan.id, checked as boolean)
-                          }
-                        />
-                      )}
-                    </TableCell>
-                    <TableCell className="font-medium">{tagihan.nama}</TableCell>
-                    <TableCell>{tagihan.periode}</TableCell>
-                    <TableCell>Rp {tagihan.nominal.toLocaleString('id-ID')}</TableCell>
-                    <TableCell>
-                      <Badge variant={
-                        tagihan.status === "Lunas" ? "default" :
-                        tagihan.status === "Bayar Sebagian" ? "secondary" : "destructive"
-                      }>
-                        {tagihan.status === "Lunas" && <CheckCircle className="h-3 w-3 mr-1" />}
-                        {tagihan.status === "Bayar Sebagian" && <AlertCircle className="h-3 w-3 mr-1" />}
-                        {tagihan.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {tagihan.tanggalBayar ? 
-                        new Date(tagihan.tanggalBayar).toLocaleDateString('id-ID') : 
-                        "-"
-                      }
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8">
+                      Memuat data...
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : tagihan.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8">
+                      Tidak ada data tagihan
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  tagihan.map((tagihanItem) => (
+                    <TableRow key={tagihanItem.id}>
+                      <TableCell>
+                        {tagihanItem.status !== "paid" && (
+                          <Checkbox
+                            checked={selectedTagihan.includes(tagihanItem.id)}
+                            onCheckedChange={(checked) => 
+                              handleTagihanChange(tagihanItem.id, checked as boolean)
+                            }
+                          />
+                        )}
+                      </TableCell>
+                      <TableCell className="font-medium">{tagihanItem.name}</TableCell>
+                      <TableCell>{tagihanItem.due_date ? new Date(tagihanItem.due_date).toLocaleDateString('id-ID') : "-"}</TableCell>
+                      <TableCell>Rp {tagihanItem.amount.toLocaleString('id-ID')}</TableCell>
+                      <TableCell>
+                        <Badge variant={
+                          tagihanItem.status === "paid" ? "default" : "destructive"
+                        }>
+                          {tagihanItem.status === "paid" && <CheckCircle className="h-3 w-3 mr-1" />}
+                          {tagihanItem.status === "paid" ? "Lunas" : "Belum Bayar"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {tagihanItem.status === "paid" ? 
+                          new Date().toLocaleDateString('id-ID') : 
+                          "-"
+                        }
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>

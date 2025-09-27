@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 
 interface TagihanData {
-  id?: number;
+  id?: string;
   kode: string;
   nama: string;
   nominal: number;

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,11 +7,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 
 interface KelasData {
-  id?: number;
+  id?: string;
   nama: string;
-  jurusan: string;
+  level: number;
   waliKelas: string;
-  jumlahSiswa: number;
+  kapasitas: number;
 }
 
 interface KelasFormProps {
@@ -24,19 +24,38 @@ interface KelasFormProps {
 
 export function KelasForm({ open, onOpenChange, onSubmit, initialData, mode }: KelasFormProps) {
   const [formData, setFormData] = useState<KelasData>({
-    nama: initialData?.nama || "",
-    jurusan: initialData?.jurusan || "",
-    waliKelas: initialData?.waliKelas || "",
-    jumlahSiswa: initialData?.jumlahSiswa || 0,
-    ...(initialData?.id && { id: initialData.id })
+    nama: "",
+    level: 1,
+    waliKelas: "",
+    kapasitas: 0
   });
+
+  // Update form data when initialData changes
+  useEffect(() => {
+    if (initialData) {
+      setFormData({
+        nama: initialData.nama || "",
+        level: initialData.level || 1,
+        waliKelas: initialData.waliKelas || "",
+        kapasitas: initialData.kapasitas || 0,
+        ...(initialData.id && { id: initialData.id })
+      });
+    } else {
+      setFormData({
+        nama: "",
+        level: 1,
+        waliKelas: "",
+        kapasitas: 0
+      });
+    }
+  }, [initialData]);
   
   const { toast } = useToast();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.nama || !formData.jurusan || !formData.waliKelas) {
+    if (!formData.nama || !formData.waliKelas) {
       toast({
         title: "Error",
         description: "Mohon lengkapi semua field yang diperlukan",
@@ -51,9 +70,9 @@ export function KelasForm({ open, onOpenChange, onSubmit, initialData, mode }: K
     // Reset form
     setFormData({
       nama: "",
-      jurusan: "",
+      level: 1,
       waliKelas: "",
-      jumlahSiswa: 0
+      kapasitas: 0
     });
   };
 
@@ -76,19 +95,16 @@ export function KelasForm({ open, onOpenChange, onSubmit, initialData, mode }: K
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="jurusan">Jurusan</Label>
-            <Select value={formData.jurusan} onValueChange={(value) => setFormData({ ...formData, jurusan: value })}>
-              <SelectTrigger>
-                <SelectValue placeholder="Pilih jurusan" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Rekayasa Perangkat Lunak">Rekayasa Perangkat Lunak</SelectItem>
-                <SelectItem value="Teknik Komputer Jaringan">Teknik Komputer Jaringan</SelectItem>
-                <SelectItem value="Multimedia">Multimedia</SelectItem>
-                <SelectItem value="Akuntansi">Akuntansi</SelectItem>
-                <SelectItem value="Administrasi Perkantoran">Administrasi Perkantoran</SelectItem>
-              </SelectContent>
-            </Select>
+            <Label htmlFor="level">Level Kelas</Label>
+            <Input
+              id="level"
+              type="number"
+              min="1"
+              max="12"
+              value={formData.level}
+              onChange={(e) => setFormData({ ...formData, level: parseInt(e.target.value) || 1 })}
+              placeholder="1"
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="waliKelas">Wali Kelas</Label>
@@ -100,12 +116,13 @@ export function KelasForm({ open, onOpenChange, onSubmit, initialData, mode }: K
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="jumlahSiswa">Jumlah Siswa</Label>
+            <Label htmlFor="kapasitas">Kapasitas Kelas</Label>
             <Input
-              id="jumlahSiswa"
+              id="kapasitas"
               type="number"
-              value={formData.jumlahSiswa}
-              onChange={(e) => setFormData({ ...formData, jumlahSiswa: parseInt(e.target.value) || 0 })}
+              min="1"
+              value={formData.kapasitas}
+              onChange={(e) => setFormData({ ...formData, kapasitas: parseInt(e.target.value) || 0 })}
               placeholder="32"
             />
           </div>

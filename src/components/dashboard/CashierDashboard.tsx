@@ -19,49 +19,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-// Mock data for cashier
-const cashierMetrics = [
-  {
-    title: "Penerimaan Hari Ini (Kasir)",
-    value: "Rp 8.750.000",
-    icon: DollarSign,
-  },
-  {
-    title: "Jumlah Transaksi Hari Ini (Kasir)",
-    value: "12",
-    icon: CreditCard,
-  }
-];
+// Data akan diambil dari Supabase database
+const cashierMetrics: any[] = [];
 
-const myTransactions = [
-  {
-    id: "TRX001",
-    siswa: "Ahmad Fauzi",
-    nis: "20240001",
-    kelas: "XII RPL 1",
-    nominal: "Rp 500.000",
-    waktu: "10:30 WIB",
-    metode: "Tunai"
-  },
-  {
-    id: "TRX002",
-    siswa: "Siti Nurhaliza", 
-    nis: "20240002",
-    kelas: "XI TKJ 2",
-    nominal: "Rp 750.000",
-    waktu: "09:15 WIB",
-    metode: "Transfer"
-  },
-  {
-    id: "TRX003",
-    siswa: "Budi Santoso",
-    nis: "20240003",
-    kelas: "X MM 1",
-    nominal: "Rp 300.000",
-    waktu: "08:45 WIB",
-    metode: "Tunai"
-  }
-];
+// Data akan diambil dari Supabase database
+const myTransactions: any[] = [];
 
 export function CashierDashboard() {
   const [searchQuery, setSearchQuery] = useState("");

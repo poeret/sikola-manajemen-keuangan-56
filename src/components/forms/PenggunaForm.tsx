@@ -1,18 +1,19 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { emailSchema, nameSchema, phoneSchema, sanitizeInput, sanitizeEmail } from "@/lib/validation";
 
 interface PenggunaData {
-  id?: number;
-  nama: string;
+  id?: string;
+  name: string;
   email: string;
   role: string;
   status: string;
-  lastLogin?: string;
+  is_active?: boolean;
 }
 
 interface PenggunaFormProps {
@@ -25,47 +26,66 @@ interface PenggunaFormProps {
 
 export function PenggunaForm({ open, onOpenChange, onSubmit, initialData, mode }: PenggunaFormProps) {
   const [formData, setFormData] = useState<PenggunaData>({
-    nama: initialData?.nama || "",
+    name: initialData?.name || "",
     email: initialData?.email || "",
-    role: initialData?.role || "Kasir",
+    role: initialData?.role || "cashier",
     status: initialData?.status || "Aktif",
     ...(initialData?.id && { id: initialData.id })
   });
   
   const { toast } = useToast();
 
+  // Update form data when initialData changes
+  useEffect(() => {
+    if (initialData) {
+      setFormData({
+        name: initialData.name || "",
+        email: initialData.email || "",
+        role: initialData.role || "cashier",
+        status: initialData.is_active ? "Aktif" : "Nonaktif",
+        ...(initialData.id && { id: initialData.id })
+      });
+    }
+  }, [initialData]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.nama || !formData.email || !formData.role) {
+    try {
+      // Sanitize inputs
+      const sanitizedData = {
+        ...formData,
+        name: sanitizeInput(formData.name),
+        email: sanitizeEmail(formData.email),
+        role: sanitizeInput(formData.role),
+        status: sanitizeInput(formData.status)
+      };
+
+      // Validate inputs
+      const validatedName = nameSchema.parse(sanitizedData.name);
+      const validatedEmail = emailSchema.parse(sanitizedData.email);
+
+      onSubmit({
+        ...sanitizedData,
+        name: validatedName,
+        email: validatedEmail
+      });
+      onOpenChange(false);
+      
+      // Reset form
+      setFormData({
+        name: "",
+        email: "",
+        role: "cashier",
+        status: "Aktif"
+      });
+    } catch (error: any) {
       toast({
-        title: "Error",
-        description: "Mohon lengkapi semua field yang diperlukan",
+        title: "Error Validasi",
+        description: error.message || "Data tidak valid",
         variant: "destructive"
       });
-      return;
     }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
-      toast({
-        title: "Error",
-        description: "Format email tidak valid",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    onSubmit(formData);
-    onOpenChange(false);
-    
-    // Reset form
-    setFormData({
-      nama: "",
-      email: "",
-      role: "Kasir",
-      status: "Aktif"
-    });
   };
 
   return (
@@ -78,11 +98,11 @@ export function PenggunaForm({ open, onOpenChange, onSubmit, initialData, mode }
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="nama">Nama Lengkap</Label>
+            <Label htmlFor="name">Nama Lengkap</Label>
             <Input
-              id="nama"
-              value={formData.nama}
-              onChange={(e) => setFormData({ ...formData, nama: e.target.value })}
+              id="name"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               placeholder="John Doe"
             />
           </div>
@@ -103,10 +123,10 @@ export function PenggunaForm({ open, onOpenChange, onSubmit, initialData, mode }
                 <SelectValue placeholder="Pilih role" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Super Admin">Super Admin</SelectItem>
-                <SelectItem value="Admin">Admin</SelectItem>
-                <SelectItem value="Kasir">Kasir</SelectItem>
-                <SelectItem value="Bendahara">Bendahara</SelectItem>
+                <SelectItem value="super_admin">Super Admin</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+                <SelectItem value="cashier">Kasir</SelectItem>
+                <SelectItem value="teacher">Guru</SelectItem>
               </SelectContent>
             </Select>
           </div>

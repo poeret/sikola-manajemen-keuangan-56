@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 
 interface LembagaData {
-  id?: number;
+  id?: string;
   nama: string;
   alamat: string;
   kepala: string;
@@ -25,12 +25,31 @@ interface LembagaFormProps {
 
 export function LembagaForm({ open, onOpenChange, onSubmit, initialData, mode }: LembagaFormProps) {
   const [formData, setFormData] = useState<LembagaData>({
-    nama: initialData?.nama || "",
-    alamat: initialData?.alamat || "",
-    kepala: initialData?.kepala || "",
-    status: initialData?.status || "Aktif",
-    ...(initialData?.id && { id: initialData.id })
+    nama: "",
+    alamat: "",
+    kepala: "",
+    status: "Aktif"
   });
+
+  // Update form data when initialData changes
+  useEffect(() => {
+    if (initialData) {
+      setFormData({
+        nama: initialData.nama || "",
+        alamat: initialData.alamat || "",
+        kepala: initialData.kepala || "",
+        status: initialData.status || "Aktif",
+        ...(initialData.id && { id: initialData.id })
+      });
+    } else {
+      setFormData({
+        nama: "",
+        alamat: "",
+        kepala: "",
+        status: "Aktif"
+      });
+    }
+  }, [initialData]);
   
   const { toast } = useToast();
 

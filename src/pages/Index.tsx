@@ -1,40 +1,32 @@
-import { useState } from "react";
 import { SuperAdminDashboard } from "@/components/dashboard/SuperAdminDashboard";
 import { CashierDashboard } from "@/components/dashboard/CashierDashboard";
-import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Index = () => {
-  // Mock user role - in real app this would come from auth context
-  const [userRole, setUserRole] = useState<"superadmin" | "cashier">("superadmin");
+  const { user } = useAuth();
 
-  return (
-    <div className="space-y-6">
-      {/* Demo role switcher - remove in production */}
-      <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-lg">
-        <span className="text-sm font-medium">Demo Mode - Pilih Role:</span>
-        <Button 
-          variant={userRole === "superadmin" ? "default" : "outline"} 
-          size="sm"
-          onClick={() => setUserRole("superadmin")}
-        >
-          Super Admin
-        </Button>
-        <Button 
-          variant={userRole === "cashier" ? "default" : "outline"} 
-          size="sm"
-          onClick={() => setUserRole("cashier")}
-        >
-          Kasir
-        </Button>
+  // Tampilkan dashboard berdasarkan role
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Memuat dashboard...</p>
+        </div>
       </div>
+    );
+  }
 
-      {userRole === "superadmin" ? (
-        <SuperAdminDashboard />
-      ) : (
-        <CashierDashboard />
-      )}
-    </div>
-  );
+  // Dashboard berdasarkan role
+  switch (user.role) {
+    case 'super_admin':
+    case 'admin':
+      return <SuperAdminDashboard />;
+    case 'cashier':
+      return <CashierDashboard />;
+    default:
+      return <CashierDashboard />; // Default ke kasir
+  }
 };
 
 export default Index;

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -27,43 +27,199 @@ import {
 } from "@/components/ui/select";
 import { Plus, Search, Edit, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { TahunAjaranForm } from "@/components/forms/TahunAjaranForm";
+import { supabase } from "@/integrations/supabase/client";
 
-// Mock data
-const tahunAjaranData = [
-  {
-    id: 1,
-    kode: "TA2024",
-    deskripsi: "Tahun Ajaran 2024/2025",
-    status: "Aktif",
-    tanggalMulai: "2024-07-01",
-    tanggalSelesai: "2025-06-30"
-  },
-  {
-    id: 2,
-    kode: "TA2023",
-    deskripsi: "Tahun Ajaran 2023/2024", 
-    status: "Tidak Aktif",
-    tanggalMulai: "2023-07-01",
-    tanggalSelesai: "2024-06-30"
-  },
-  {
-    id: 3,
-    kode: "TA2022",
-    deskripsi: "Tahun Ajaran 2022/2023",
-    status: "Tidak Aktif", 
-    tanggalMulai: "2022-07-01",
-    tanggalSelesai: "2023-06-30"
-  }
-];
+interface TahunAjaranData {
+  id: string;
+  code: string;
+  description: string;
+  start_date: string;
+  end_date: string;
+  is_active: boolean | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
 
 export default function TahunAjaran() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [tahunAjaran, setTahunAjaran] = useState<TahunAjaranData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<"create" | "edit">("create");
+  const [selectedTahunAjaran, setSelectedTahunAjaran] = useState<TahunAjaranData | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [tahunAjaranToDelete, setTahunAjaranToDelete] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  // Load data from database
+  useEffect(() => {
+    loadTahunAjaran();
+  }, []);
+
+  const loadTahunAjaran = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('academic_years')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error loading academic years:', error);
+        toast({
+          title: "Error",
+          description: "Gagal memuat data tahun ajaran",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      setTahunAjaran(data || []);
+    } catch (error) {
+      console.error('Error loading academic years:', error);
+      toast({
+        title: "Error",
+        description: "Gagal memuat data tahun ajaran",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
   
-  const filteredData = tahunAjaranData.filter(item => 
-    item.kode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.deskripsi.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredData = tahunAjaran.filter(item => 
+    item.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    item.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const handleAdd = () => {
+    setSelectedTahunAjaran(null);
+    setFormMode("create");
+    setFormOpen(true);
+  };
+
+  const handleEdit = (item: TahunAjaranData) => {
+    setSelectedTahunAjaran(item);
+    setFormMode("edit");
+    setFormOpen(true);
+  };
+
+  const handleDelete = (id: string) => {
+    setTahunAjaranToDelete(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (tahunAjaranToDelete) {
+      try {
+        const { error } = await supabase
+          .from('academic_years')
+          .delete()
+          .eq('id', tahunAjaranToDelete);
+
+        if (error) {
+          console.error('Error deleting academic year:', error);
+          toast({
+            title: "Error",
+            description: "Gagal menghapus tahun ajaran",
+            variant: "destructive"
+          });
+          return;
+        }
+
+        setTahunAjaran(prev => prev.filter(item => item.id !== tahunAjaranToDelete));
+        toast({
+          title: "Berhasil",
+          description: "Tahun ajaran berhasil dihapus"
+        });
+      } catch (error) {
+        console.error('Error deleting academic year:', error);
+        toast({
+          title: "Error",
+          description: "Gagal menghapus tahun ajaran",
+          variant: "destructive"
+        });
+      }
+    }
+    setDeleteDialogOpen(false);
+    setTahunAjaranToDelete(null);
+  };
+
+  const handleSubmit = async (data: any) => {
+    try {
+      if (formMode === "create") {
+        const { data: newAcademicYear, error } = await supabase
+          .from('academic_years')
+          .insert({
+            code: data.kode,
+            description: data.deskripsi,
+            start_date: data.tanggalMulai,
+            end_date: data.tanggalSelesai,
+            is_active: data.status === "Aktif"
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Error creating academic year:', error);
+          toast({
+            title: "Error",
+            description: "Gagal menambahkan tahun ajaran",
+            variant: "destructive"
+          });
+          return;
+        }
+
+        setTahunAjaran(prev => [newAcademicYear, ...prev]);
+        toast({
+          title: "Berhasil",
+          description: "Tahun ajaran berhasil ditambahkan"
+        });
+      } else {
+        const { data: updatedAcademicYear, error } = await supabase
+          .from('academic_years')
+          .update({
+            code: data.kode,
+            description: data.deskripsi,
+            start_date: data.tanggalMulai,
+            end_date: data.tanggalSelesai,
+            is_active: data.status === "Aktif"
+          })
+          .eq('id', selectedTahunAjaran?.id)
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Error updating academic year:', error);
+          toast({
+            title: "Error",
+            description: "Gagal memperbarui tahun ajaran",
+            variant: "destructive"
+          });
+          return;
+        }
+
+        setTahunAjaran(prev => prev.map(item => 
+          item.id === selectedTahunAjaran?.id ? updatedAcademicYear : item
+        ));
+        toast({
+          title: "Berhasil",
+          description: "Tahun ajaran berhasil diperbarui"
+        });
+      }
+    } catch (error) {
+      console.error('Error saving academic year:', error);
+      toast({
+        title: "Error",
+        description: "Gagal menyimpan tahun ajaran",
+        variant: "destructive"
+      });
+    }
+    setFormOpen(false);
+  };
 
   return (
     <div className="space-y-6">
@@ -75,57 +231,10 @@ export default function TahunAjaran() {
           </p>
         </div>
         
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Tambah Data
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Tambah Tahun Ajaran Baru</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="kode">Kode Tahun Ajaran</Label>
-                <Input id="kode" placeholder="Contoh: TA2025" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="deskripsi">Deskripsi</Label>
-                <Input id="deskripsi" placeholder="Contoh: Tahun Ajaran 2025/2026" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="tanggalMulai">Tanggal Mulai</Label>
-                <Input id="tanggalMulai" type="date" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="tanggalSelesai">Tanggal Selesai</Label>
-                <Input id="tanggalSelesai" type="date" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
-                <Select>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pilih status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="aktif">Aktif</SelectItem>
-                    <SelectItem value="tidak-aktif">Tidak Aktif</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                  Batal
-                </Button>
-                <Button onClick={() => setIsAddDialogOpen(false)}>
-                  Simpan
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <Button onClick={handleAdd}>
+          <Plus className="h-4 w-4 mr-2" />
+          Tambah Data
+        </Button>
       </div>
 
       <Card>
@@ -162,33 +271,80 @@ export default function TahunAjaran() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredData.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium">{item.kode}</TableCell>
-                  <TableCell>{item.deskripsi}</TableCell>
-                  <TableCell>{new Date(item.tanggalMulai).toLocaleDateString('id-ID')}</TableCell>
-                  <TableCell>{new Date(item.tanggalSelesai).toLocaleDateString('id-ID')}</TableCell>
-                  <TableCell>
-                    <Badge variant={item.status === "Aktif" ? "default" : "secondary"}>
-                      {item.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Button variant="ghost" size="sm">
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8">
+                    Memuat data...
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : filteredData.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8">
+                    Tidak ada data tahun ajaran
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredData.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium">{item.code}</TableCell>
+                    <TableCell>{item.description}</TableCell>
+                    <TableCell>{new Date(item.start_date).toLocaleDateString('id-ID')}</TableCell>
+                    <TableCell>{new Date(item.end_date).toLocaleDateString('id-ID')}</TableCell>
+                    <TableCell>
+                      <Badge variant={item.is_active ? "default" : "secondary"}>
+                        {item.is_active ? "Aktif" : "Tidak Aktif"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handleEdit(item)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handleDelete(item.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+
+      {/* Form Dialog */}
+      <TahunAjaranForm
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        onSubmit={handleSubmit}
+        initialData={selectedTahunAjaran ? {
+          id: selectedTahunAjaran.id,
+          kode: selectedTahunAjaran.code,
+          deskripsi: selectedTahunAjaran.description,
+          tanggalMulai: selectedTahunAjaran.start_date,
+          tanggalSelesai: selectedTahunAjaran.end_date,
+          status: selectedTahunAjaran.is_active ? "Aktif" : "Tidak Aktif"
+        } : undefined}
+        mode={formMode}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={confirmDelete}
+        title="Konfirmasi Hapus"
+        description="Apakah Anda yakin ingin menghapus tahun ajaran ini? Tindakan ini tidak dapat dibatalkan."
+      />
     </div>
   );
 }

@@ -9,7 +9,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 
 const pageNames: Record<string, string> = {
   "/": "Dashboard",
@@ -34,24 +35,19 @@ const pageNames: Record<string, string> = {
 
 export function AppHeader() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const currentPageName = pageNames[location.pathname] || "Halaman";
-  
-  // Mock user data - in real app, this would come from auth context
-  const user = {
-    name: "Admin Sekolah",
-    role: "Super Admin",
-    email: "admin@smkn1.sch.id"
-  };
 
   const handleLogout = () => {
-    // Handle logout logic here
-    console.log("Logout clicked");
+    logout();
+    navigate("/login");
   };
 
   return (
-    <header className="h-16 border-b bg-background flex items-center justify-between px-6">
+    <header className="h-16 border-b bg-background flex items-center justify-between px-6 sticky top-0 z-40">
       <div className="flex items-center gap-4">
-        <SidebarTrigger />
+        <SidebarTrigger className="hover:bg-accent hover:text-accent-foreground transition-colors duration-200" />
         <h1 className="text-xl font-semibold text-foreground">{currentPageName}</h1>
       </div>
 
@@ -67,8 +63,8 @@ export function AppHeader() {
                 <User className="h-4 w-4 text-primary-foreground" />
               </div>
               <div className="text-left hidden sm:block">
-                <p className="text-sm font-medium">{user.name}</p>
-                <p className="text-xs text-muted-foreground">{user.role}</p>
+                <p className="text-sm font-medium">{user?.name || "User"}</p>
+                <p className="text-xs text-muted-foreground">{user?.role || "Role"}</p>
               </div>
               <ChevronDown className="h-4 w-4" />
             </Button>

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { TrendingUp, Search, ArrowUp, CheckCircle } from "lucide-react";
+import { TrendingUp, Search, ArrowUp, CheckCircle, Plus, Edit, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -18,17 +18,81 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { KenaikanKelasForm } from "@/components/forms/KenaikanKelasForm";
 
-const mockKenaikan = [
-  { id: 1, nis: "20240001", nama: "Ahmad Fauzi", kelasSaatIni: "XI RPL 1", kelasTujuan: "XII RPL 1", status: "Naik" },
-  { id: 2, nis: "20240002", nama: "Siti Nurhaliza", kelasSaatIni: "X TKJ 2", kelasTujuan: "XI TKJ 2", status: "Naik" },
-  { id: 3, nis: "20240003", nama: "Budi Santoso", kelasSaatIni: "XI MM 1", kelasTujuan: "XII MM 1", status: "Pending" },
-];
+// Data akan diambil dari Supabase database
+const mockKenaikan: any[] = [];
 
 export default function KenaikanKelas() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [kenaikan, setKenaikan] = useState(mockKenaikan);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<"create" | "edit">("create");
+  const [selectedKenaikan, setSelectedKenaikan] = useState<any>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [kenaikanToDelete, setKenaikanToDelete] = useState<number | null>(null);
   const [showKenaikanDialog, setShowKenaikanDialog] = useState(false);
   const { toast } = useToast();
+
+  const filteredKenaikan = kenaikan.filter(item => 
+    item.nis.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    item.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    item.kelasSaatIni.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    item.kelasTujuan.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const handleAdd = () => {
+    setSelectedKenaikan(null);
+    setFormMode("create");
+    setFormOpen(true);
+  };
+
+  const handleEdit = (item: any) => {
+    setSelectedKenaikan(item);
+    setFormMode("edit");
+    setFormOpen(true);
+  };
+
+  const handleDelete = (id: number) => {
+    setKenaikanToDelete(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (kenaikanToDelete) {
+      setKenaikan(prev => prev.filter(item => item.id !== kenaikanToDelete));
+      toast({
+        title: "Berhasil",
+        description: "Data kenaikan kelas berhasil dihapus"
+      });
+    }
+    setDeleteDialogOpen(false);
+    setKenaikanToDelete(null);
+  };
+
+  const handleSubmit = (data: any) => {
+    if (formMode === "create") {
+      const newKenaikan = {
+        ...data,
+        id: Math.max(...kenaikan.map(k => k.id)) + 1
+      };
+      setKenaikan(prev => [...prev, newKenaikan]);
+      toast({
+        title: "Berhasil",
+        description: "Data kenaikan kelas berhasil ditambahkan"
+      });
+    } else {
+      setKenaikan(prev => prev.map(item => 
+        item.id === selectedKenaikan?.id ? { ...data, id: selectedKenaikan.id } : item
+      ));
+      toast({
+        title: "Berhasil",
+        description: "Data kenaikan kelas berhasil diperbarui"
+      });
+    }
+    setFormOpen(false);
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -52,10 +116,16 @@ export default function KenaikanKelas() {
             Kelola proses kenaikan kelas siswa
           </p>
         </div>
-        <Button onClick={() => setShowKenaikanDialog(true)}>
-          <CheckCircle className="mr-2 h-4 w-4" />
-          Proses Kenaikan
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={handleAdd}>
+            <Plus className="mr-2 h-4 w-4" />
+            Tambah Data
+          </Button>
+          <Button onClick={() => setShowKenaikanDialog(true)}>
+            <CheckCircle className="mr-2 h-4 w-4" />
+            Proses Kenaikan
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -88,7 +158,7 @@ export default function KenaikanKelas() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockKenaikan.map((siswa) => (
+              {filteredKenaikan.map((siswa) => (
                 <TableRow key={siswa.id}>
                   <TableCell className="font-medium">{siswa.nis}</TableCell>
                   <TableCell>{siswa.nama}</TableCell>
@@ -105,18 +175,22 @@ export default function KenaikanKelas() {
                     </span>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={() => {
-                        toast({
-                          title: "Detail Siswa",
-                          description: `Menampilkan detail untuk ${siswa.nama}`,
-                        });
-                      }}
-                    >
-                      Detail
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => handleEdit(siswa)}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => handleDelete(siswa.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -152,6 +226,24 @@ export default function KenaikanKelas() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Form Dialog */}
+      <KenaikanKelasForm
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        onSubmit={handleSubmit}
+        initialData={selectedKenaikan}
+        mode={formMode}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={confirmDelete}
+        title="Konfirmasi Hapus"
+        description="Apakah Anda yakin ingin menghapus data kenaikan kelas ini? Tindakan ini tidak dapat dibatalkan."
+      />
     </div>
   );
 }

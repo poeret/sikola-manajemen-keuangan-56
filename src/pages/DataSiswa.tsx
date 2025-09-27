@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -27,53 +27,216 @@ import {
 } from "@/components/ui/select";
 import { Plus, Search, Edit, Trash2, User } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { SiswaForm } from "@/components/forms/SiswaForm";
+import { supabase } from "@/integrations/supabase/client";
 
-// Mock data
-const siswaData = [
-  {
-    id: 1,
-    nis: "20240001",
-    nama: "Ahmad Fauzi Rahman",
-    kelas: "XII RPL 1",
-    tahunMasuk: "2021",
-    alamat: "Jl. Merdeka No. 123, Jakarta",
-    namaOrtu: "Bapak Rahman",
-    kontakOrtu: "081234567890",
-    status: "Aktif"
-  },
-  {
-    id: 2,
-    nis: "20240002", 
-    nama: "Siti Nurhaliza",
-    kelas: "XI TKJ 2",
-    tahunMasuk: "2022",
-    alamat: "Jl. Sudirman No. 456, Jakarta",
-    namaOrtu: "Ibu Sari",
-    kontakOrtu: "081234567891",
-    status: "Aktif"
-  },
-  {
-    id: 3,
-    nis: "20240003",
-    nama: "Budi Santoso",
-    kelas: "X MM 1", 
-    tahunMasuk: "2023",
-    alamat: "Jl. Thamrin No. 789, Jakarta",
-    namaOrtu: "Bapak Santoso",
-    kontakOrtu: "081234567892",
-    status: "Aktif"
-  }
-];
+interface SiswaData {
+  id: string;
+  nis: string;
+  name: string;
+  gender: string | null;
+  birth_date: string | null;
+  birth_place: string | null;
+  address: string | null;
+  phone: string | null;
+  parent_name: string | null;
+  parent_phone: string | null;
+  class_id: string | null;
+  status: string | null;
+  admission_date: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
 
 export default function DataSiswa() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [siswa, setSiswa] = useState<SiswaData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<"create" | "edit">("create");
+  const [selectedSiswa, setSelectedSiswa] = useState<SiswaData | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [siswaToDelete, setSiswaToDelete] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  // Load data from database
+  useEffect(() => {
+    loadSiswa();
+  }, []);
+
+  const loadSiswa = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('students')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error loading students:', error);
+        toast({
+          title: "Error",
+          description: "Gagal memuat data siswa",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      setSiswa(data || []);
+    } catch (error) {
+      console.error('Error loading students:', error);
+      toast({
+        title: "Error",
+        description: "Gagal memuat data siswa",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
   
-  const filteredData = siswaData.filter(item => 
+  const filteredData = siswa.filter(item => 
     item.nis.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.kelas.toLowerCase().includes(searchQuery.toLowerCase())
+    item.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const handleAdd = () => {
+    setSelectedSiswa(null);
+    setFormMode("create");
+    setFormOpen(true);
+  };
+
+  const handleEdit = (item: SiswaData) => {
+    setSelectedSiswa(item);
+    setFormMode("edit");
+    setFormOpen(true);
+  };
+
+  const handleDelete = (id: string) => {
+    setSiswaToDelete(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (siswaToDelete) {
+      try {
+        const { error } = await supabase
+          .from('students')
+          .delete()
+          .eq('id', siswaToDelete);
+
+        if (error) {
+          console.error('Error deleting student:', error);
+          toast({
+            title: "Error",
+            description: "Gagal menghapus siswa",
+            variant: "destructive"
+          });
+          return;
+        }
+
+        setSiswa(prev => prev.filter(item => item.id !== siswaToDelete));
+        toast({
+          title: "Berhasil",
+          description: "Siswa berhasil dihapus"
+        });
+      } catch (error) {
+        console.error('Error deleting student:', error);
+        toast({
+          title: "Error",
+          description: "Gagal menghapus siswa",
+          variant: "destructive"
+        });
+      }
+    }
+    setDeleteDialogOpen(false);
+    setSiswaToDelete(null);
+  };
+
+  const handleSubmit = async (data: any) => {
+    try {
+      if (formMode === "create") {
+        const { data: newStudent, error } = await supabase
+          .from('students')
+          .insert({
+            nis: data.nis,
+            name: data.nama,
+            gender: data.jenisKelamin,
+            birth_date: data.tanggalLahir,
+            birth_place: data.tempatLahir,
+            address: data.alamat,
+            phone: data.telepon,
+            parent_name: data.namaOrtu,
+            parent_phone: data.teleponOrtu,
+            status: data.status
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Error creating student:', error);
+          toast({
+            title: "Error",
+            description: "Gagal menambahkan siswa",
+            variant: "destructive"
+          });
+          return;
+        }
+
+        setSiswa(prev => [newStudent, ...prev]);
+        toast({
+          title: "Berhasil",
+          description: "Siswa berhasil ditambahkan"
+        });
+      } else {
+        const { data: updatedStudent, error } = await supabase
+          .from('students')
+          .update({
+            nis: data.nis,
+            name: data.nama,
+            gender: data.jenisKelamin,
+            birth_date: data.tanggalLahir,
+            birth_place: data.tempatLahir,
+            address: data.alamat,
+            phone: data.telepon,
+            parent_name: data.namaOrtu,
+            parent_phone: data.teleponOrtu,
+            status: data.status
+          })
+          .eq('id', selectedSiswa?.id)
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Error updating student:', error);
+          toast({
+            title: "Error",
+            description: "Gagal memperbarui siswa",
+            variant: "destructive"
+          });
+          return;
+        }
+
+        setSiswa(prev => prev.map(item => 
+          item.id === selectedSiswa?.id ? updatedStudent : item
+        ));
+        toast({
+          title: "Berhasil",
+          description: "Siswa berhasil diperbarui"
+        });
+      }
+    } catch (error) {
+      console.error('Error saving student:', error);
+      toast({
+        title: "Error",
+        description: "Gagal menyimpan siswa",
+        variant: "destructive"
+      });
+    }
+    setFormOpen(false);
+  };
 
   return (
     <div className="space-y-6">
@@ -85,66 +248,10 @@ export default function DataSiswa() {
           </p>
         </div>
         
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Tambah Siswa
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Tambah Siswa Baru</DialogTitle>
-            </DialogHeader>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="nis">NIS</Label>
-                <Input id="nis" placeholder="Nomor Induk Siswa" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="nama">Nama Lengkap</Label>
-                <Input id="nama" placeholder="Nama lengkap siswa" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="kelas">Kelas</Label>
-                <Select>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Pilih kelas" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="X-RPL-1">X RPL 1</SelectItem>
-                    <SelectItem value="X-TKJ-1">X TKJ 1</SelectItem>
-                    <SelectItem value="X-MM-1">X MM 1</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="tahunMasuk">Tahun Masuk</Label>
-                <Input id="tahunMasuk" placeholder="2024" />
-              </div>
-              <div className="col-span-2 space-y-2">
-                <Label htmlFor="alamat">Alamat</Label>
-                <Input id="alamat" placeholder="Alamat lengkap siswa" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="namaOrtu">Nama Orang Tua</Label>
-                <Input id="namaOrtu" placeholder="Nama orang tua/wali" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="kontakOrtu">Kontak Orang Tua</Label>
-                <Input id="kontakOrtu" placeholder="Nomor HP orang tua" />
-              </div>
-              <div className="col-span-2 flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                  Batal
-                </Button>
-                <Button onClick={() => setIsAddDialogOpen(false)}>
-                  Simpan
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <Button onClick={handleAdd}>
+          <Plus className="h-4 w-4 mr-2" />
+          Tambah Siswa
+        </Button>
       </div>
 
       <Card>
@@ -186,35 +293,87 @@ export default function DataSiswa() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredData.map((siswa) => (
-                <TableRow key={siswa.id}>
-                  <TableCell className="font-medium">{siswa.nis}</TableCell>
-                  <TableCell>{siswa.nama}</TableCell>
-                  <TableCell>{siswa.kelas}</TableCell>
-                  <TableCell>{siswa.tahunMasuk}</TableCell>
-                  <TableCell>{siswa.namaOrtu}</TableCell>
-                  <TableCell>{siswa.kontakOrtu}</TableCell>
-                  <TableCell>
-                    <Badge variant={siswa.status === "Aktif" ? "default" : "secondary"}>
-                      {siswa.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Button variant="ghost" size="sm">
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8">
+                    Memuat data...
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : filteredData.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8">
+                    Tidak ada data siswa
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredData.map((siswa) => (
+                  <TableRow key={siswa.id}>
+                    <TableCell className="font-medium">{siswa.nis}</TableCell>
+                    <TableCell>{siswa.name}</TableCell>
+                    <TableCell>-</TableCell>
+                    <TableCell>{siswa.admission_date ? new Date(siswa.admission_date).getFullYear() : "-"}</TableCell>
+                    <TableCell>{siswa.parent_name || "-"}</TableCell>
+                    <TableCell>{siswa.parent_phone || "-"}</TableCell>
+                    <TableCell>
+                      <Badge variant={siswa.status === "active" ? "default" : "secondary"}>
+                        {siswa.status === "active" ? "Aktif" : "Tidak Aktif"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handleEdit(siswa)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handleDelete(siswa.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+
+      {/* Form Dialog */}
+      <SiswaForm
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        onSubmit={handleSubmit}
+        initialData={selectedSiswa ? {
+          id: selectedSiswa.id,
+          nis: selectedSiswa.nis,
+          nama: selectedSiswa.name,
+          jenisKelamin: selectedSiswa.gender || "",
+          tanggalLahir: selectedSiswa.birth_date || "",
+          tempatLahir: selectedSiswa.birth_place || "",
+          alamat: selectedSiswa.address || "",
+          telepon: selectedSiswa.phone || "",
+          namaOrtu: selectedSiswa.parent_name || "",
+          teleponOrtu: selectedSiswa.parent_phone || "",
+          status: selectedSiswa.status || "active"
+        } : undefined}
+        mode={formMode}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={confirmDelete}
+        title="Konfirmasi Hapus"
+        description="Apakah Anda yakin ingin menghapus data siswa ini? Tindakan ini tidak dapat dibatalkan."
+      />
     </div>
   );
 }

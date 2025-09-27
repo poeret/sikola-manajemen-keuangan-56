@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,7 @@ import { Award, Plus, Search, Edit, Trash2, Percent } from "lucide-react";
 import { BeasiswaForm } from "@/components/forms/BeasiswaForm";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Table,
   TableBody,
@@ -15,25 +16,67 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-const initialBeasiswa = [
-  { id: 1, nama: "Beasiswa Prestasi", deskripsi: "Untuk siswa berprestasi akademik", persentasePotongan: 50, status: "Aktif" },
-  { id: 2, nama: "Beasiswa Kurang Mampu", deskripsi: "Bantuan untuk siswa tidak mampu", persentasePotongan: 75, status: "Aktif" },
-  { id: 3, nama: "Beasiswa Yatim Piatu", deskripsi: "Khusus untuk anak yatim piatu", persentasePotongan: 100, status: "Aktif" },
-];
+interface BeasiswaData {
+  id: string;
+  name: string;
+  description: string | null;
+  amount: number | null;
+  criteria: string | null;
+  status: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
 
 export default function KategoriBeasiswa() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [beasiswa, setBeasiswa] = useState(initialBeasiswa);
+  const [beasiswa, setBeasiswa] = useState<BeasiswaData[]>([]);
+  const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
-  const [selectedBeasiswa, setSelectedBeasiswa] = useState<any>(null);
+  const [selectedBeasiswa, setSelectedBeasiswa] = useState<BeasiswaData | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [beasiswaToDelete, setBeasiswaToDelete] = useState<number | null>(null);
+  const [beasiswaToDelete, setBeasiswaToDelete] = useState<string | null>(null);
   const { toast } = useToast();
 
+  // Load data from database
+  useEffect(() => {
+    loadBeasiswa();
+  }, []);
+
+  const loadBeasiswa = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('scholarship_categories')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error loading scholarship categories:', error);
+        toast({
+          title: "Error",
+          description: "Gagal memuat data kategori beasiswa",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      setBeasiswa(data || []);
+    } catch (error) {
+      console.error('Error loading scholarship categories:', error);
+      toast({
+        title: "Error",
+        description: "Gagal memuat data kategori beasiswa",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredBeasiswa = beasiswa.filter(item =>
-    item.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.deskripsi.toLowerCase().includes(searchQuery.toLowerCase())
+    item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const handleAdd = () => {
@@ -42,49 +85,124 @@ export default function KategoriBeasiswa() {
     setFormOpen(true);
   };
 
-  const handleEdit = (item: any) => {
+  const handleEdit = (item: BeasiswaData) => {
     setSelectedBeasiswa(item);
     setFormMode("edit");
     setFormOpen(true);
   };
 
-  const handleDelete = (id: number) => {
+  const handleDelete = (id: string) => {
     setBeasiswaToDelete(id);
     setDeleteDialogOpen(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (beasiswaToDelete) {
-      setBeasiswa(prev => prev.filter(item => item.id !== beasiswaToDelete));
-      toast({
-        title: "Berhasil",
-        description: "Kategori beasiswa berhasil dihapus"
-      });
+      try {
+        const { error } = await supabase
+          .from('scholarship_categories')
+          .delete()
+          .eq('id', beasiswaToDelete);
+
+        if (error) {
+          console.error('Error deleting scholarship category:', error);
+          toast({
+            title: "Error",
+            description: "Gagal menghapus kategori beasiswa",
+            variant: "destructive"
+          });
+          return;
+        }
+
+        setBeasiswa(prev => prev.filter(item => item.id !== beasiswaToDelete));
+        toast({
+          title: "Berhasil",
+          description: "Kategori beasiswa berhasil dihapus"
+        });
+      } catch (error) {
+        console.error('Error deleting scholarship category:', error);
+        toast({
+          title: "Error",
+          description: "Gagal menghapus kategori beasiswa",
+          variant: "destructive"
+        });
+      }
     }
     setDeleteDialogOpen(false);
     setBeasiswaToDelete(null);
   };
 
-  const handleSubmit = (data: any) => {
-    if (formMode === "create") {
-      const newBeasiswa = {
-        ...data,
-        id: Math.max(...beasiswa.map(b => b.id)) + 1
-      };
-      setBeasiswa(prev => [...prev, newBeasiswa]);
+  const handleSubmit = async (data: any) => {
+    try {
+      if (formMode === "create") {
+        const { data: newScholarship, error } = await supabase
+          .from('scholarship_categories')
+          .insert({
+            name: data.nama,
+            description: data.deskripsi,
+            amount: data.persentasePotongan,
+            criteria: "",
+            status: "active"
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Error creating scholarship category:', error);
+          toast({
+            title: "Error",
+            description: "Gagal menambahkan kategori beasiswa",
+            variant: "destructive"
+          });
+          return;
+        }
+
+        setBeasiswa(prev => [newScholarship, ...prev]);
+        toast({
+          title: "Berhasil",
+          description: "Kategori beasiswa berhasil ditambahkan"
+        });
+      } else {
+        const { data: updatedScholarship, error } = await supabase
+          .from('scholarship_categories')
+          .update({
+            name: data.nama,
+            description: data.deskripsi,
+            amount: data.persentasePotongan,
+            criteria: "",
+            status: data.status
+          })
+          .eq('id', selectedBeasiswa?.id)
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Error updating scholarship category:', error);
+          toast({
+            title: "Error",
+            description: "Gagal memperbarui kategori beasiswa",
+            variant: "destructive"
+          });
+          return;
+        }
+
+        setBeasiswa(prev => prev.map(item => 
+          item.id === selectedBeasiswa?.id ? updatedScholarship : item
+        ));
+        toast({
+          title: "Berhasil",
+          description: "Kategori beasiswa berhasil diperbarui"
+        });
+      }
+    } catch (error) {
+      console.error('Error saving scholarship category:', error);
       toast({
-        title: "Berhasil",
-        description: "Kategori beasiswa berhasil ditambahkan"
-      });
-    } else {
-      setBeasiswa(prev => prev.map(item => 
-        item.id === selectedBeasiswa?.id ? { ...data, id: selectedBeasiswa.id } : item
-      ));
-      toast({
-        title: "Berhasil",
-        description: "Kategori beasiswa berhasil diperbarui"
+        title: "Error",
+        description: "Gagal menyimpan kategori beasiswa",
+        variant: "destructive"
       });
     }
+    setFormOpen(false);
   };
 
   return (
@@ -131,33 +249,47 @@ export default function KategoriBeasiswa() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredBeasiswa.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium">{item.nama}</TableCell>
-                  <TableCell>{item.deskripsi}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Percent className="h-4 w-4 text-muted-foreground" />
-                      {item.persentasePotongan}%
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-success/10 text-success">
-                      {item.status}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => handleEdit(item)}>
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleDelete(item.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-8">
+                    Memuat data...
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : filteredBeasiswa.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-8">
+                    Tidak ada data kategori beasiswa
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredBeasiswa.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium">{item.name}</TableCell>
+                    <TableCell>{item.description || "-"}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Percent className="h-4 w-4 text-muted-foreground" />
+                        {item.amount ? `Rp ${item.amount.toLocaleString('id-ID')}` : "-"}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-success/10 text-success">
+                        {item.status || "Aktif"}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => handleEdit(item)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDelete(item.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -167,7 +299,13 @@ export default function KategoriBeasiswa() {
         open={formOpen}
         onOpenChange={setFormOpen}
         onSubmit={handleSubmit}
-        initialData={selectedBeasiswa}
+        initialData={selectedBeasiswa ? {
+          id: selectedBeasiswa.id,
+          nama: selectedBeasiswa.name,
+          deskripsi: selectedBeasiswa.description || "",
+          persentasePotongan: selectedBeasiswa.amount || 0,
+          status: selectedBeasiswa.status || "active"
+        } : undefined}
         mode={formMode}
       />
 

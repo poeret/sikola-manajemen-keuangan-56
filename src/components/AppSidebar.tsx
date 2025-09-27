@@ -15,8 +15,13 @@ import {
   BarChart3,
   FolderOpen,
   Award,
+  Shield,
+  UserCheck,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
+import { useState } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -28,9 +33,11 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { useAuth } from "@/contexts/AuthContext";
 import schoolLogo from "@/assets/school-logo.png";
 
-const menuItems = [
+// Menu untuk Super Admin
+const superAdminMenuItems = [
   {
     title: "Beranda",
     items: [
@@ -85,63 +92,171 @@ const menuItems = [
   },
 ];
 
+// Menu untuk Kasir (lebih terbatas)
+const cashierMenuItems = [
+  {
+    title: "Beranda",
+    items: [
+      { title: "Dashboard", url: "/", icon: Home },
+    ],
+  },
+  {
+    title: "Transaksi",
+    items: [
+      { title: "Pembayaran SPP", url: "/pembayaran-spp", icon: CreditCard },
+    ],
+  },
+  {
+    title: "Laporan",
+    items: [
+      { title: "Laporan Pembayaran", url: "/laporan-pembayaran", icon: FileText },
+    ],
+  },
+  {
+    title: "Sistem",
+    items: [
+      { title: "Pengaturan", url: "/pengaturan", icon: Settings },
+    ],
+  },
+];
+
 export function AppSidebar() {
   const { state } = useSidebar();
   const location = useLocation();
+  const { user } = useAuth();
   const currentPath = location.pathname;
+  
+  // State untuk mengontrol collapse/expand sub menu
+  const [expandedMenus, setExpandedMenus] = useState<Set<string>>(new Set());
 
-  const isCollapsed = state === "collapsed";
   const isActive = (path: string) => currentPath === path;
-  const getNavCls = ({ isActive }: { isActive: boolean }) =>
-    isActive 
-      ? "bg-primary text-primary-foreground font-medium" 
-      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground";
+  
+  // Fungsi untuk toggle collapse/expand sub menu
+  const toggleMenu = (menuTitle: string) => {
+    setExpandedMenus(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(menuTitle)) {
+        newSet.delete(menuTitle);
+      } else {
+        newSet.add(menuTitle);
+      }
+      return newSet;
+    });
+  };
+  
+  // Tentukan menu berdasarkan role
+  const getMenuItems = () => {
+    if (!user) return [];
+    
+    switch (user.role) {
+      case 'super_admin':
+      case 'admin':
+        return superAdminMenuItems;
+      case 'cashier':
+        return cashierMenuItems;
+      default:
+        return cashierMenuItems; // Default ke kasir untuk role lain
+    }
+  };
+
+  const menuItems = getMenuItems();
 
   return (
-    <Sidebar className={`${isCollapsed ? "w-14" : "w-64"} bg-sidebar-background`}>
+    <Sidebar 
+      className="bg-sidebar-background"
+      collapsible="icon"
+    >
       <SidebarContent className="bg-sidebar-background">
         <div className="p-4 border-b border-sidebar-border">
           <div className="flex items-center gap-3">
             <img 
               src={schoolLogo} 
               alt="Logo Sekolah" 
-              className="w-8 h-8 rounded-full"
+              className="w-8 h-8 rounded-full flex-shrink-0"
             />
-            {!isCollapsed && (
-              <div>
-                <h2 className="font-semibold text-sm text-sidebar-foreground">SMK Negeri 1</h2>
-                <p className="text-xs text-sidebar-foreground/70">Sistem Keuangan</p>
-              </div>
-            )}
+            <div className="min-w-0 flex-1">
+              <h2 className="font-semibold text-sm text-sidebar-foreground truncate">SMK Negeri 1</h2>
+              <p className="text-xs text-sidebar-foreground/70 truncate">Sistem Keuangan</p>
+            </div>
           </div>
         </div>
 
-        {menuItems.map((group) => (
-          <SidebarGroup key={group.title}>
-            {!isCollapsed && <SidebarGroupLabel>{group.title}</SidebarGroupLabel>}
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {group.items.map((item) => {
-                  const active = isActive(item.url);
-                  const buttonCls = active
-                    ? "bg-primary text-primary-foreground font-medium"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground";
+        {/* Role Badge */}
+        {user && (
+          <div className="px-4 py-2 border-b border-sidebar-border">
+            <div className="flex items-center gap-2">
+              {user.role === 'super_admin' || user.role === 'admin' ? (
+                <Shield className="w-4 h-4 text-blue-500 flex-shrink-0" />
+              ) : (
+                <UserCheck className="w-4 h-4 text-green-500 flex-shrink-0" />
+              )}
+              <span className="text-xs font-medium text-sidebar-foreground truncate">
+                {user.role === 'super_admin' ? 'Super Admin' : 
+                 user.role === 'admin' ? 'Administrator' : 
+                 user.role === 'cashier' ? 'Kasir' : 'User'}
+              </span>
+            </div>
+          </div>
+        )}
 
-                  return (
-                    <SidebarMenuItem key={item.title}>
-                      <SidebarMenuButton asChild isActive={active} className={buttonCls}>
-                        <NavLink to={item.url} end>
-                          <item.icon className="h-4 w-4" />
-                          {!isCollapsed && <span>{item.title}</span>}
-                        </NavLink>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ))}
+        {menuItems.map((group) => {
+          const isExpanded = expandedMenus.has(group.title);
+          const hasItems = group.items && group.items.length > 0;
+          
+          return (
+            <SidebarGroup key={group.title}>
+              <SidebarGroupLabel 
+                className="px-4 py-2 text-xs font-semibold text-sidebar-foreground/60 uppercase tracking-wider cursor-pointer hover:bg-sidebar-accent/50 transition-colors"
+                onClick={() => hasItems && toggleMenu(group.title)}
+              >
+                <div className="flex items-center justify-between">
+                  <span>{group.title}</span>
+                  {hasItems && (
+                    <div className="transition-transform duration-200">
+                      {isExpanded ? (
+                        <ChevronDown className="w-4 h-4" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4" />
+                      )}
+                    </div>
+                  )}
+                </div>
+              </SidebarGroupLabel>
+              
+              {hasItems && (
+                <div className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                  isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+                }`}>
+                  <SidebarGroupContent>
+                    <SidebarMenu>
+                      {group.items.map((item) => {
+                        const active = isActive(item.url);
+                        const buttonCls = active
+                          ? "bg-primary text-primary-foreground font-medium"
+                          : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground";
+
+                        return (
+                          <SidebarMenuItem key={item.title}>
+                            <SidebarMenuButton 
+                              asChild 
+                              isActive={active} 
+                              className={`${buttonCls} transition-colors duration-200`}
+                            >
+                              <NavLink to={item.url} end className="flex items-center gap-3">
+                                <item.icon className="h-4 w-4 flex-shrink-0" />
+                                <span className="truncate">{item.title}</span>
+                              </NavLink>
+                            </SidebarMenuButton>
+                          </SidebarMenuItem>
+                        );
+                      })}
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </div>
+              )}
+            </SidebarGroup>
+          );
+        })}
       </SidebarContent>
     </Sidebar>
   );

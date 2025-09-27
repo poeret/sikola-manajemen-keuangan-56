@@ -18,76 +18,11 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 
-// Mock data
-const metrics = [
-  {
-    title: "Total Penerimaan Bulan Ini",
-    value: "Rp 125.400.000",
-    icon: DollarSign,
-    trend: { value: "12%", isPositive: true }
-  },
-  {
-    title: "Total Tunggakan",
-    value: "Rp 18.500.000",
-    icon: AlertCircle,
-    trend: { value: "8%", isPositive: false }
-  },
-  {
-    title: "Total Siswa Aktif",
-    value: "1.247",
-    icon: Users,
-    trend: { value: "3%", isPositive: true }
-  },
-  {
-    title: "Total Transaksi Hari Ini",
-    value: "43",
-    icon: CreditCard,
-    trend: { value: "15%", isPositive: true }
-  }
-];
+// Data akan diambil dari Supabase database
+const metrics: any[] = [];
 
-const recentTransactions = [
-  {
-    id: "TRX001",
-    siswa: "Ahmad Fauzi",
-    kelas: "XII RPL 1",
-    nominal: "Rp 500.000",
-    waktu: "10:30 WIB",
-    status: "Lunas"
-  },
-  {
-    id: "TRX002",
-    siswa: "Siti Nurhaliza",
-    kelas: "XI TKJ 2",
-    nominal: "Rp 750.000",
-    waktu: "09:15 WIB",
-    status: "Lunas"
-  },
-  {
-    id: "TRX003",
-    siswa: "Budi Santoso",
-    kelas: "X MM 1",
-    nominal: "Rp 300.000",
-    waktu: "08:45 WIB",
-    status: "Sebagian"
-  },
-  {
-    id: "TRX004",
-    siswa: "Maya Sari",
-    kelas: "XII AKL 1",
-    nominal: "Rp 600.000",
-    waktu: "08:20 WIB",
-    status: "Lunas"
-  },
-  {
-    id: "TRX005",
-    siswa: "Rizki Pratama",
-    kelas: "XI RPL 2",
-    nominal: "Rp 450.000",
-    waktu: "07:55 WIB",
-    status: "Lunas"
-  }
-];
+// Data akan diambil dari Supabase database
+const recentTransactions: any[] = [];
 
 export function SuperAdminDashboard() {
   return (

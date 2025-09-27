@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Table,
   TableBody,
@@ -28,25 +29,145 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-const mockKategori = [
-  { id: 1, kode: "PEN-001", nama: "Penerimaan SPP", jenis: "Pemasukan", deskripsi: "Pembayaran SPP siswa", status: "Aktif" },
-  { id: 2, kode: "KEL-001", nama: "Operasional Sekolah", jenis: "Pengeluaran", deskripsi: "Biaya operasional harian", status: "Aktif" },
-  { id: 3, kode: "PEN-002", nama: "Penerimaan Ujian", jenis: "Pemasukan", deskripsi: "Biaya ujian siswa", status: "Aktif" },
-];
+interface KategoriKeuanganData {
+  id: string;
+  name: string;
+  description: string | null;
+  type: string;
+  status: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
 
 export default function KategoriKeuangan() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [kategori, setKategori] = useState<KategoriKeuanganData[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [formData, setFormData] = useState({
-    kode: "",
     nama: "",
     jenis: "",
     deskripsi: ""
   });
   const { toast } = useToast();
 
+  // Load data from database
+  useEffect(() => {
+    loadKategori();
+  }, []);
+
+  const loadKategori = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('financial_categories')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error loading financial categories:', error);
+        toast({
+          title: "Error",
+          description: "Gagal memuat data kategori keuangan",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      setKategori(data || []);
+    } catch (error) {
+      console.error('Error loading financial categories:', error);
+      toast({
+        title: "Error",
+        description: "Gagal memuat data kategori keuangan",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getJenisColor = (jenis: string) => {
-    return jenis === "Pemasukan" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive";
+    return jenis === "income" ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive";
+  };
+
+  const filteredKategori = kategori.filter(item =>
+    item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      const { data: newCategory, error } = await supabase
+        .from('financial_categories')
+        .insert({
+          name: formData.nama,
+          description: formData.deskripsi,
+          type: formData.jenis as "income" | "expense",
+          status: "active"
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating financial category:', error);
+        toast({
+          title: "Error",
+          description: "Gagal menambahkan kategori",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      setKategori(prev => [newCategory, ...prev]);
+      setFormData({ nama: "", jenis: "", deskripsi: "" });
+      setShowAddDialog(false);
+      toast({
+        title: "Berhasil",
+        description: "Kategori berhasil ditambahkan"
+      });
+    } catch (error) {
+      console.error('Error creating financial category:', error);
+      toast({
+        title: "Error",
+        description: "Gagal menambahkan kategori",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('financial_categories')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error deleting financial category:', error);
+        toast({
+          title: "Error",
+          description: "Gagal menghapus kategori",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      setKategori(prev => prev.filter(item => item.id !== id));
+      toast({
+        title: "Berhasil",
+        description: "Kategori berhasil dihapus"
+      });
+    } catch (error) {
+      console.error('Error deleting financial category:', error);
+      toast({
+        title: "Error",
+        description: "Gagal menghapus kategori",
+        variant: "destructive"
+      });
+    }
   };
 
   return (
@@ -94,51 +215,60 @@ export default function KategoriKeuangan() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mockKategori.map((kategori) => (
-                <TableRow key={kategori.id}>
-                  <TableCell className="font-medium">{kategori.kode}</TableCell>
-                  <TableCell>{kategori.nama}</TableCell>
-                  <TableCell>
-                    <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${getJenisColor(kategori.jenis)}`}>
-                      {kategori.jenis}
-                    </span>
-                  </TableCell>
-                  <TableCell>{kategori.deskripsi}</TableCell>
-                  <TableCell>
-                    <span className="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-success/10 text-success">
-                      {kategori.status}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => {
-                          toast({
-                            title: "Edit Kategori",
-                            description: `Mengedit kategori ${kategori.nama}`,
-                          });
-                        }}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => {
-                          toast({
-                            title: "Hapus Kategori",
-                            description: `Kategori ${kategori.nama} telah dihapus`,
-                          });
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8">
+                    Memuat data...
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : filteredKategori.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8">
+                    Tidak ada data kategori
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredKategori.map((kategori) => (
+                  <TableRow key={kategori.id}>
+                    <TableCell className="font-medium">{kategori.id.slice(0, 8)}</TableCell>
+                    <TableCell>{kategori.name}</TableCell>
+                    <TableCell>
+                      <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${getJenisColor(kategori.type)}`}>
+                        {kategori.type === "income" ? "Pemasukan" : "Pengeluaran"}
+                      </span>
+                    </TableCell>
+                    <TableCell>{kategori.description || "-"}</TableCell>
+                    <TableCell>
+                      <span className="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-success/10 text-success">
+                        {kategori.status || "Aktif"}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => {
+                            toast({
+                              title: "Edit Kategori",
+                              description: `Mengedit kategori ${kategori.name}`,
+                            });
+                          }}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handleDelete(kategori.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -151,15 +281,6 @@ export default function KategoriKeuangan() {
             <DialogTitle>Tambah Kategori Keuangan</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="kode">Kode Kategori</Label>
-              <Input
-                id="kode"
-                placeholder="Contoh: PEN-001"
-                value={formData.kode}
-                onChange={(e) => setFormData({...formData, kode: e.target.value})}
-              />
-            </div>
             <div className="space-y-2">
               <Label htmlFor="nama">Nama Kategori</Label>
               <Input
@@ -176,8 +297,8 @@ export default function KategoriKeuangan() {
                   <SelectValue placeholder="Pilih jenis kategori" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Pemasukan">Pemasukan</SelectItem>
-                  <SelectItem value="Pengeluaran">Pengeluaran</SelectItem>
+                  <SelectItem value="income">Pemasukan</SelectItem>
+                  <SelectItem value="expense">Pengeluaran</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -195,15 +316,8 @@ export default function KategoriKeuangan() {
                 Batal
               </Button>
               <Button 
-                onClick={() => {
-                  toast({
-                    title: "Kategori Berhasil Ditambah",
-                    description: "Kategori keuangan baru telah berhasil ditambahkan.",
-                  });
-                  setFormData({ kode: "", nama: "", jenis: "", deskripsi: "" });
-                  setShowAddDialog(false);
-                }}
-                disabled={!formData.kode || !formData.nama || !formData.jenis}
+                onClick={handleSubmit}
+                disabled={!formData.nama || !formData.jenis}
               >
                 Simpan
               </Button>

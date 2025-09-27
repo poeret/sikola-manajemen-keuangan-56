@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import TahunAjaran from "./pages/TahunAjaran";
@@ -23,108 +23,179 @@ import LaporanKeuangan from "./pages/LaporanKeuangan";
 import Pengaturan from "./pages/Pengaturan";
 import NotFound from "./pages/NotFound";
 import { AppLayout } from "./components/AppLayout";
+import { AuthProvider } from "./contexts/AuthContext";
+import { ProtectedRoute } from "./components/ProtectedRoute";
+import { AdminOnly, CashierOnly } from "./components/RoleGuard";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { SupabaseWrapper } from "./components/SupabaseWrapper";
 
 const queryClient = new QueryClient();
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/" element={
-            <AppLayout>
-              <Index />
-            </AppLayout>
-          } />
-          <Route path="/tahun-ajaran" element={
-            <AppLayout>
-              <TahunAjaran />
-            </AppLayout>
-          } />
-          <Route path="/lembaga" element={
-            <AppLayout>
-              <Lembaga />
-            </AppLayout>
-          } />
-          <Route path="/kelas" element={
-            <AppLayout>
-              <Kelas />
-            </AppLayout>
-          } />
-          <Route path="/tagihan" element={
-            <AppLayout>
-              <Tagihan />
-            </AppLayout>
-          } />
-          <Route path="/pengguna" element={
-            <AppLayout>
-              <ManajemenPengguna />
-            </AppLayout>
-          } />
-          <Route path="/beasiswa" element={
-            <AppLayout>
-              <KategoriBeasiswa />
-            </AppLayout>
-          } />
-          <Route path="/siswa" element={
-            <AppLayout>
-              <DataSiswa />
-            </AppLayout>
-          } />
-          <Route path="/kenaikan-kelas" element={
-            <AppLayout>
-              <KenaikanKelas />
-            </AppLayout>
-          } />
-          <Route path="/pembayaran-spp" element={
-            <AppLayout>
-              <PembayaranSPP />
-            </AppLayout>
-          } />
-          <Route path="/kategori-keuangan" element={
-            <AppLayout>
-              <KategoriKeuangan />
-            </AppLayout>
-          } />
-          <Route path="/rencana-kegiatan" element={
-            <AppLayout>
-              <RencanaKegiatan />
-            </AppLayout>
-          } />
-          <Route path="/realisasi-kegiatan" element={
-            <AppLayout>
-              <RealisasiKegiatan />
-            </AppLayout>
-          } />
-          <Route path="/buku-kas" element={
-            <AppLayout>
-              <BukuKas />
-            </AppLayout>
-          } />
-          <Route path="/laporan-pembayaran" element={
-            <AppLayout>
-              <LaporanPembayaran />
-            </AppLayout>
-          } />
-          <Route path="/laporan-keuangan" element={
-            <AppLayout>
-              <LaporanKeuangan />
-            </AppLayout>
-          } />
-          <Route path="/pengaturan" element={
-            <AppLayout>
-              <Pengaturan />
-            </AppLayout>
-          } />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <AuthProvider>
+              <SupabaseWrapper>
+                <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+              <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/" element={
+              <ProtectedRoute>
+                <AppLayout>
+                  <Index />
+                </AppLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/tahun-ajaran" element={
+              <ProtectedRoute>
+                <AdminOnly>
+                  <AppLayout>
+                    <TahunAjaran />
+                  </AppLayout>
+                </AdminOnly>
+              </ProtectedRoute>
+            } />
+            <Route path="/lembaga" element={
+              <ProtectedRoute>
+                <AdminOnly>
+                  <AppLayout>
+                    <Lembaga />
+                  </AppLayout>
+                </AdminOnly>
+              </ProtectedRoute>
+            } />
+            <Route path="/kelas" element={
+              <ProtectedRoute>
+                <AdminOnly>
+                  <AppLayout>
+                    <Kelas />
+                  </AppLayout>
+                </AdminOnly>
+              </ProtectedRoute>
+            } />
+            <Route path="/tagihan" element={
+              <ProtectedRoute>
+                <AdminOnly>
+                  <AppLayout>
+                    <Tagihan />
+                  </AppLayout>
+                </AdminOnly>
+              </ProtectedRoute>
+            } />
+            <Route path="/pengguna" element={
+              <ProtectedRoute>
+                <AdminOnly>
+                  <AppLayout>
+                    <ManajemenPengguna />
+                  </AppLayout>
+                </AdminOnly>
+              </ProtectedRoute>
+            } />
+            <Route path="/beasiswa" element={
+              <ProtectedRoute>
+                <AdminOnly>
+                  <AppLayout>
+                    <KategoriBeasiswa />
+                  </AppLayout>
+                </AdminOnly>
+              </ProtectedRoute>
+            } />
+            <Route path="/siswa" element={
+              <ProtectedRoute>
+                <AdminOnly>
+                  <AppLayout>
+                    <DataSiswa />
+                  </AppLayout>
+                </AdminOnly>
+              </ProtectedRoute>
+            } />
+            <Route path="/kenaikan-kelas" element={
+              <ProtectedRoute>
+                <AdminOnly>
+                  <AppLayout>
+                    <KenaikanKelas />
+                  </AppLayout>
+                </AdminOnly>
+              </ProtectedRoute>
+            } />
+            <Route path="/pembayaran-spp" element={
+              <ProtectedRoute>
+                <AppLayout>
+                  <PembayaranSPP />
+                </AppLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/kategori-keuangan" element={
+              <ProtectedRoute>
+                <AdminOnly>
+                  <AppLayout>
+                    <KategoriKeuangan />
+                  </AppLayout>
+                </AdminOnly>
+              </ProtectedRoute>
+            } />
+            <Route path="/rencana-kegiatan" element={
+              <ProtectedRoute>
+                <AdminOnly>
+                  <AppLayout>
+                    <RencanaKegiatan />
+                  </AppLayout>
+                </AdminOnly>
+              </ProtectedRoute>
+            } />
+            <Route path="/realisasi-kegiatan" element={
+              <ProtectedRoute>
+                <AdminOnly>
+                  <AppLayout>
+                    <RealisasiKegiatan />
+                  </AppLayout>
+                </AdminOnly>
+              </ProtectedRoute>
+            } />
+            <Route path="/buku-kas" element={
+              <ProtectedRoute>
+                <AdminOnly>
+                  <AppLayout>
+                    <BukuKas />
+                  </AppLayout>
+                </AdminOnly>
+              </ProtectedRoute>
+            } />
+            <Route path="/laporan-pembayaran" element={
+              <ProtectedRoute>
+                <AppLayout>
+                  <LaporanPembayaran />
+                </AppLayout>
+              </ProtectedRoute>
+            } />
+            <Route path="/laporan-keuangan" element={
+              <ProtectedRoute>
+                <AdminOnly>
+                  <AppLayout>
+                    <LaporanKeuangan />
+                  </AppLayout>
+                </AdminOnly>
+              </ProtectedRoute>
+            } />
+            <Route path="/pengaturan" element={
+              <ProtectedRoute>
+                <AppLayout>
+                  <Pengaturan />
+                </AppLayout>
+              </ProtectedRoute>
+            } />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+              </Routes>
+                </BrowserRouter>
+              </SupabaseWrapper>
+        </AuthProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;

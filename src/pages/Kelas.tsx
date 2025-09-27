@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +6,7 @@ import { GraduationCap, Plus, Search, Edit, Trash2, Users } from "lucide-react";
 import { KelasForm } from "@/components/forms/KelasForm";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Table,
   TableBody,
@@ -15,26 +16,68 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-const initialKelas = [
-  { id: 1, nama: "XII RPL 1", jurusan: "Rekayasa Perangkat Lunak", waliKelas: "Budi Setiawan, S.Kom", jumlahSiswa: 32 },
-  { id: 2, nama: "XI TKJ 2", jurusan: "Teknik Komputer Jaringan", waliKelas: "Sari Dewi, S.T", jumlahSiswa: 28 },
-  { id: 3, nama: "X MM 1", jurusan: "Multimedia", waliKelas: "Ahmad Fauzi, S.Pd", jumlahSiswa: 30 },
-];
+interface KelasData {
+  id: string;
+  name: string;
+  level: number;
+  academic_year_id: string | null;
+  homeroom_teacher: string | null;
+  capacity: number | null;
+  current_students: number | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
 
 export default function Kelas() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [kelas, setKelas] = useState(initialKelas);
+  const [kelas, setKelas] = useState<KelasData[]>([]);
+  const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
-  const [selectedKelas, setSelectedKelas] = useState<any>(null);
+  const [selectedKelas, setSelectedKelas] = useState<KelasData | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [kelasToDelete, setKelasToDelete] = useState<number | null>(null);
+  const [kelasToDelete, setKelasToDelete] = useState<string | null>(null);
   const { toast } = useToast();
 
+  // Load data from database
+  useEffect(() => {
+    loadKelas();
+  }, []);
+
+  const loadKelas = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('classes')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error loading classes:', error);
+        toast({
+          title: "Error",
+          description: "Gagal memuat data kelas",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      setKelas(data || []);
+    } catch (error) {
+      console.error('Error loading classes:', error);
+      toast({
+        title: "Error",
+        description: "Gagal memuat data kelas",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredKelas = kelas.filter(item =>
-    item.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.jurusan.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.waliKelas.toLowerCase().includes(searchQuery.toLowerCase())
+    item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (item.homeroom_teacher && item.homeroom_teacher.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const handleAdd = () => {
@@ -43,49 +86,122 @@ export default function Kelas() {
     setFormOpen(true);
   };
 
-  const handleEdit = (item: any) => {
+  const handleEdit = (item: KelasData) => {
     setSelectedKelas(item);
     setFormMode("edit");
     setFormOpen(true);
   };
 
-  const handleDelete = (id: number) => {
+  const handleDelete = (id: string) => {
     setKelasToDelete(id);
     setDeleteDialogOpen(true);
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (kelasToDelete) {
-      setKelas(prev => prev.filter(item => item.id !== kelasToDelete));
-      toast({
-        title: "Berhasil",
-        description: "Kelas berhasil dihapus"
-      });
+      try {
+        const { error } = await supabase
+          .from('classes')
+          .delete()
+          .eq('id', kelasToDelete);
+
+        if (error) {
+          console.error('Error deleting class:', error);
+          toast({
+            title: "Error",
+            description: "Gagal menghapus kelas",
+            variant: "destructive"
+          });
+          return;
+        }
+
+        setKelas(prev => prev.filter(item => item.id !== kelasToDelete));
+        toast({
+          title: "Berhasil",
+          description: "Kelas berhasil dihapus"
+        });
+      } catch (error) {
+        console.error('Error deleting class:', error);
+        toast({
+          title: "Error",
+          description: "Gagal menghapus kelas",
+          variant: "destructive"
+        });
+      }
     }
     setDeleteDialogOpen(false);
     setKelasToDelete(null);
   };
 
-  const handleSubmit = (data: any) => {
-    if (formMode === "create") {
-      const newKelas = {
-        ...data,
-        id: Math.max(...kelas.map(k => k.id)) + 1
-      };
-      setKelas(prev => [...prev, newKelas]);
+  const handleSubmit = async (data: any) => {
+    try {
+      if (formMode === "create") {
+        const { data: newClass, error } = await supabase
+          .from('classes')
+          .insert({
+            name: data.nama,
+            level: data.level,
+            homeroom_teacher: data.waliKelas,
+            capacity: data.kapasitas
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Error creating class:', error);
+          toast({
+            title: "Error",
+            description: "Gagal menambahkan kelas",
+            variant: "destructive"
+          });
+          return;
+        }
+
+        setKelas(prev => [newClass, ...prev]);
+        toast({
+          title: "Berhasil",
+          description: "Kelas berhasil ditambahkan"
+        });
+      } else {
+        const { data: updatedClass, error } = await supabase
+          .from('classes')
+          .update({
+            name: data.nama,
+            level: data.level,
+            homeroom_teacher: data.waliKelas,
+            capacity: data.kapasitas
+          })
+          .eq('id', selectedKelas?.id)
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Error updating class:', error);
+          toast({
+            title: "Error",
+            description: "Gagal memperbarui kelas",
+            variant: "destructive"
+          });
+          return;
+        }
+
+        setKelas(prev => prev.map(item => 
+          item.id === selectedKelas?.id ? updatedClass : item
+        ));
+        toast({
+          title: "Berhasil",
+          description: "Kelas berhasil diperbarui"
+        });
+      }
+    } catch (error) {
+      console.error('Error saving class:', error);
       toast({
-        title: "Berhasil",
-        description: "Kelas berhasil ditambahkan"
-      });
-    } else {
-      setKelas(prev => prev.map(item => 
-        item.id === selectedKelas?.id ? { ...data, id: selectedKelas.id } : item
-      ));
-      toast({
-        title: "Berhasil",
-        description: "Kelas berhasil diperbarui"
+        title: "Error",
+        description: "Gagal menyimpan kelas",
+        variant: "destructive"
       });
     }
+    setFormOpen(false);
   };
 
   return (
@@ -132,29 +248,43 @@ export default function Kelas() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredKelas.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium">{item.nama}</TableCell>
-                  <TableCell>{item.jurusan}</TableCell>
-                  <TableCell>{item.waliKelas}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-muted-foreground" />
-                      {item.jumlahSiswa}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => handleEdit(item)}>
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleDelete(item.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-8">
+                    Memuat data...
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : filteredKelas.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-8">
+                    Tidak ada data kelas
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredKelas.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium">{item.name}</TableCell>
+                    <TableCell>Level {item.level}</TableCell>
+                    <TableCell>{item.homeroom_teacher || "-"}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                        {item.current_students || 0} / {item.capacity || 0}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => handleEdit(item)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDelete(item.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -164,7 +294,13 @@ export default function Kelas() {
         open={formOpen}
         onOpenChange={setFormOpen}
         onSubmit={handleSubmit}
-        initialData={selectedKelas}
+        initialData={selectedKelas ? {
+          id: selectedKelas.id,
+          nama: selectedKelas.name,
+          level: selectedKelas.level,
+          waliKelas: selectedKelas.homeroom_teacher || "",
+          kapasitas: selectedKelas.capacity || 0
+        } : undefined}
         mode={formMode}
       />
 
