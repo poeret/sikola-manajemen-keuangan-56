@@ -12,6 +12,12 @@ interface KelasData {
   level: number;
   waliKelas: string;
   kapasitas: number;
+  institution_id?: string;
+}
+
+interface InstitutionData {
+  id: string;
+  name: string;
 }
 
 interface KelasFormProps {
@@ -20,15 +26,18 @@ interface KelasFormProps {
   onSubmit: (data: KelasData) => void;
   initialData?: KelasData;
   mode: "create" | "edit";
+  institutions?: InstitutionData[];
 }
 
-export function KelasForm({ open, onOpenChange, onSubmit, initialData, mode }: KelasFormProps) {
+export function KelasForm({ open, onOpenChange, onSubmit, initialData, mode, institutions = [] }: KelasFormProps) {
   const [formData, setFormData] = useState<KelasData>({
     nama: "",
     level: 1,
     waliKelas: "",
-    kapasitas: 0
+    kapasitas: 0,
+    institution_id: ""
   });
+
 
   // Update form data when initialData changes
   useEffect(() => {
@@ -38,6 +47,7 @@ export function KelasForm({ open, onOpenChange, onSubmit, initialData, mode }: K
         level: initialData.level || 1,
         waliKelas: initialData.waliKelas || "",
         kapasitas: initialData.kapasitas || 0,
+        institution_id: initialData.institution_id || "",
         ...(initialData.id && { id: initialData.id })
       });
     } else {
@@ -45,7 +55,8 @@ export function KelasForm({ open, onOpenChange, onSubmit, initialData, mode }: K
         nama: "",
         level: 1,
         waliKelas: "",
-        kapasitas: 0
+        kapasitas: 0,
+        institution_id: ""
       });
     }
   }, [initialData]);
@@ -125,6 +136,30 @@ export function KelasForm({ open, onOpenChange, onSubmit, initialData, mode }: K
               onChange={(e) => setFormData({ ...formData, kapasitas: parseInt(e.target.value) || 0 })}
               placeholder="32"
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="institution">Lembaga</Label>
+            <Select 
+              value={formData.institution_id} 
+              onValueChange={(value) => setFormData({ ...formData, institution_id: value })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Pilih lembaga" />
+              </SelectTrigger>
+              <SelectContent>
+                {institutions.length > 0 ? (
+                  institutions.map((institution) => (
+                    <SelectItem key={institution.id} value={institution.id}>
+                      {institution.name}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <SelectItem value="" disabled>
+                    Tidak ada lembaga tersedia
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex justify-end space-x-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
