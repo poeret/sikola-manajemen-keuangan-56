@@ -44,6 +44,12 @@ interface SiswaData {
   parent_name: string | null;
   parent_phone: string | null;
   class_id: string | null;
+  // Related class data (joined from classes table)
+  classes?: {
+    name?: string | null;
+    level?: number | null;
+    institutions?: { name?: string | null } | string | null;
+  } | null;
   status: string | null;
   admission_date: string | null;
   created_at: string | null;
@@ -59,19 +65,23 @@ export default function DataSiswa() {
   const [selectedSiswa, setSelectedSiswa] = useState<SiswaData | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [siswaToDelete, setSiswaToDelete] = useState<string | null>(null);
+  const [institutions, setInstitutions] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedInstitution, setSelectedInstitution] = useState<string>("all");
   const { toast } = useToast();
 
   // Load data from database
   useEffect(() => {
     loadSiswa();
+    loadInstitutions();
   }, []);
 
   const loadSiswa = async () => {
     try {
       setLoading(true);
+      // First, fetch students with class basic info
       const { data, error } = await supabase
         .from('students')
-        .select('*')
+        .select('*, classes(name, level, institution_id)')
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -84,7 +94,30 @@ export default function DataSiswa() {
         return;
       }
 
-      setSiswa(data || []);
+      // Resolve institution names in a separate query to avoid nested join issues
+      const institutionIds = Array.from(new Set(
+        (data || [])
+          .map((s: any) => s.classes?.institution_id)
+          .filter((id: any) => !!id)
+      ));
+
+      let institutionsById: Record<string, { name: string }>= {};
+      if (institutionIds.length > 0) {
+        const { data: institutions } = await supabase
+          .from('institutions')
+          .select('id, name')
+          .in('id', institutionIds as string[]);
+        institutionsById = Object.fromEntries((institutions || []).map((i: any) => [i.id, { name: i.name }]));
+      }
+
+      const enriched = (data || []).map((s: any) => ({
+        ...s,
+        classes: s.classes
+          ? { ...s.classes, institutions: s.classes.institution_id ? institutionsById[s.classes.institution_id] || null : null }
+          : null
+      }));
+
+      setSiswa(enriched as any);
     } catch (error) {
       console.error('Error loading students:', error);
       toast({
@@ -96,11 +129,32 @@ export default function DataSiswa() {
       setLoading(false);
     }
   };
+
+  const loadInstitutions = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('institutions')
+        .select('id, name')
+        .order('name', { ascending: true });
+      if (!error) setInstitutions(data || []);
+    } catch {}
+  };
   
-  const filteredData = siswa.filter(item => 
-    item.nis.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    item.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredData = siswa.filter(item => {
+    const q = searchQuery.toLowerCase();
+    const className = (item.classes?.name || '').toLowerCase();
+    const institutionName = (typeof item.classes?.institutions === 'object'
+      ? (item.classes?.institutions?.name || '')
+      : '').toLowerCase();
+    const matchesText = (
+      item.nis.toLowerCase().includes(q) ||
+      item.name.toLowerCase().includes(q) ||
+      className.includes(q) ||
+      institutionName.includes(q)
+    );
+    const matchesInstitution = selectedInstitution === 'all' || (item as any)?.classes?.institution_id === selectedInstitution;
+    return matchesText && matchesInstitution;
+  });
 
   const handleAdd = () => {
     setSelectedSiswa(null);
@@ -170,7 +224,8 @@ export default function DataSiswa() {
             phone: data.telepon,
             parent_name: data.namaOrtu,
             parent_phone: data.teleponOrtu,
-            status: data.status
+            status: data.status,
+            class_id: data.classId || null
           })
           .select()
           .single();
@@ -203,7 +258,8 @@ export default function DataSiswa() {
             phone: data.telepon,
             parent_name: data.namaOrtu,
             parent_phone: data.teleponOrtu,
-            status: data.status
+            status: data.status,
+            class_id: data.classId || null
           })
           .eq('id', selectedSiswa?.id)
           .select()
@@ -267,6 +323,20 @@ export default function DataSiswa() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="max-w-sm"
             />
+            <div className="ml-auto flex items-center gap-2">
+              <Label htmlFor="filter-institution" className="text-sm text-muted-foreground">Lembaga</Label>
+              <Select value={selectedInstitution} onValueChange={setSelectedInstitution}>
+                <SelectTrigger id="filter-institution" className="w-56">
+                  <SelectValue placeholder="Semua lembaga" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua lembaga</SelectItem>
+                  {institutions.map((i) => (
+                    <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -285,6 +355,7 @@ export default function DataSiswa() {
                 <TableHead>NIS</TableHead>
                 <TableHead>Nama Lengkap</TableHead>
                 <TableHead>Kelas</TableHead>
+              <TableHead>Lembaga</TableHead>
                 <TableHead>Tahun Masuk</TableHead>
                 <TableHead>Orang Tua</TableHead>
                 <TableHead>Kontak</TableHead>
@@ -310,7 +381,12 @@ export default function DataSiswa() {
                   <TableRow key={siswa.id}>
                     <TableCell className="font-medium">{siswa.nis}</TableCell>
                     <TableCell>{siswa.name}</TableCell>
-                    <TableCell>-</TableCell>
+                    <TableCell>{siswa.classes?.name || '-'}</TableCell>
+                    <TableCell>{
+                      typeof siswa.classes?.institutions === 'object'
+                        ? (siswa.classes?.institutions?.name || '-')
+                        : '-'
+                    }</TableCell>
                     <TableCell>{siswa.admission_date ? new Date(siswa.admission_date).getFullYear() : "-"}</TableCell>
                     <TableCell>{siswa.parent_name || "-"}</TableCell>
                     <TableCell>{siswa.parent_phone || "-"}</TableCell>
@@ -361,7 +437,8 @@ export default function DataSiswa() {
           telepon: selectedSiswa.phone || "",
           namaOrtu: selectedSiswa.parent_name || "",
           teleponOrtu: selectedSiswa.parent_phone || "",
-          status: selectedSiswa.status || "active"
+          status: selectedSiswa.status || "active",
+          classId: selectedSiswa.class_id || ""
         } : undefined}
         mode={formMode}
       />

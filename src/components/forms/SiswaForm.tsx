@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { nameSchema, sanitizeInput } from "@/lib/validation";
+import { supabase } from "@/integrations/supabase/client";
 
 interface SiswaData {
   id?: string;
@@ -19,6 +20,7 @@ interface SiswaData {
   namaOrtu: string;
   teleponOrtu: string;
   status: string;
+  classId?: string;
 }
 
 interface SiswaFormProps {
@@ -40,8 +42,20 @@ export function SiswaForm({ open, onOpenChange, onSubmit, initialData, mode }: S
     telepon: "",
     namaOrtu: "",
     teleponOrtu: "",
-    status: "active"
+    status: "active",
+    classId: ""
   });
+
+  const [classes, setClasses] = useState<Array<{ id: string; name: string }>>([]);
+
+  // Load classes for selector
+  useEffect(() => {
+    const loadClasses = async () => {
+      const { data } = await supabase.from('classes').select('id, name').order('level', { ascending: true }).order('name', { ascending: true });
+      setClasses(data || []);
+    };
+    loadClasses();
+  }, []);
 
   // Update form data when initialData changes
   useEffect(() => {
@@ -57,6 +71,7 @@ export function SiswaForm({ open, onOpenChange, onSubmit, initialData, mode }: S
         namaOrtu: initialData.namaOrtu || "",
         teleponOrtu: initialData.teleponOrtu || "",
         status: initialData.status || "active",
+        classId: initialData.classId || "",
         ...(initialData.id && { id: initialData.id })
       });
     } else {
@@ -70,7 +85,8 @@ export function SiswaForm({ open, onOpenChange, onSubmit, initialData, mode }: S
         telepon: "",
         namaOrtu: "",
         teleponOrtu: "",
-        status: "active"
+        status: "active",
+        classId: ""
       });
     }
   }, [initialData]);
@@ -93,7 +109,8 @@ export function SiswaForm({ open, onOpenChange, onSubmit, initialData, mode }: S
         telepon: sanitizeInput(formData.telepon),
         namaOrtu: sanitizeInput(formData.namaOrtu),
         teleponOrtu: sanitizeInput(formData.teleponOrtu),
-        status: sanitizeInput(formData.status)
+        status: sanitizeInput(formData.status),
+        classId: sanitizeInput(formData.classId || "")
       };
 
       // Validate inputs
@@ -116,7 +133,8 @@ export function SiswaForm({ open, onOpenChange, onSubmit, initialData, mode }: S
         telepon: "",
         namaOrtu: "",
         teleponOrtu: "",
-        status: "active"
+        status: "active",
+        classId: ""
       });
     } catch (error: any) {
       toast({
@@ -135,6 +153,8 @@ export function SiswaForm({ open, onOpenChange, onSubmit, initialData, mode }: S
             {mode === "create" ? "Tambah Siswa Baru" : "Edit Data Siswa"}
           </DialogTitle>
         </DialogHeader>
+        {/* Hidden description for accessibility warning */}
+        <p id="siswa-form-desc" className="sr-only">Formulir data siswa</p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -251,6 +271,20 @@ export function SiswaForm({ open, onOpenChange, onSubmit, initialData, mode }: S
                 <SelectItem value="inactive">Tidak Aktif</SelectItem>
                 <SelectItem value="graduated">Lulus</SelectItem>
                 <SelectItem value="dropped_out">Drop Out</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="classId">Kelas</Label>
+            <Select value={formData.classId} onValueChange={(value) => setFormData({ ...formData, classId: value })}>
+              <SelectTrigger>
+                <SelectValue placeholder="Pilih kelas" />
+              </SelectTrigger>
+              <SelectContent>
+                {classes.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
