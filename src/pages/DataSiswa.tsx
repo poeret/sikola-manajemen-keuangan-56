@@ -400,6 +400,13 @@ export default function DataSiswa() {
                         <Button 
                           variant="ghost" 
                           size="sm"
+                          asChild
+                        >
+                          <a href={`/siswa/${siswa.id}`}>Detail</a>
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
                           onClick={() => handleEdit(siswa)}
                         >
                           <Edit className="h-4 w-4" />

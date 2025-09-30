@@ -7,6 +7,7 @@ import Index from "./pages/Index";
 import Login from "./pages/Login";
 import TahunAjaran from "./pages/TahunAjaran";
 import DataSiswa from "./pages/DataSiswa";
+import DetailSiswa from "./pages/DetailSiswa";
 import PembayaranSPP from "./pages/PembayaranSPP";
 import Lembaga from "./pages/Lembaga";
 import Kelas from "./pages/Kelas";
@@ -108,6 +109,15 @@ const App = () => (
                 <AdminOnly>
                   <AppLayout>
                     <DataSiswa />
+                  </AppLayout>
+                </AdminOnly>
+              </ProtectedRoute>
+            } />
+            <Route path="/siswa/:id" element={
+              <ProtectedRoute>
+                <AdminOnly>
+                  <AppLayout>
+                    <DetailSiswa />
                   </AppLayout>
                 </AdminOnly>
               </ProtectedRoute>

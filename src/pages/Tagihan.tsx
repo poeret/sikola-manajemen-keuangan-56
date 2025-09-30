@@ -15,6 +15,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface TagihanData {
   id: string;
@@ -40,9 +44,27 @@ export default function Tagihan() {
   const [tagihanToDelete, setTagihanToDelete] = useState<string | null>(null);
   const { toast } = useToast();
 
+  // Assign Massal state
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignBill, setAssignBill] = useState<TagihanData | null>(null);
+  const [assignTarget, setAssignTarget] = useState<"semua" | "kelas">("semua");
+  const [classes, setClasses] = useState<{ id: string; name: string; level: number }[]>([]);
+  const [selectedClassId, setSelectedClassId] = useState<string>("");
+  const [assignLoading, setAssignLoading] = useState(false);
+  // Generator bulanan
+  const [repeatMonthly, setRepeatMonthly] = useState<boolean>(false);
+  const [monthsCount, setMonthsCount] = useState<number>(12);
+  const [startDate, setStartDate] = useState<string>(() => {
+    const d = new Date();
+    const iso = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0,10);
+    return iso;
+  });
+  const [overwriteExisting, setOverwriteExisting] = useState<boolean>(false);
+
   // Load data from database
   useEffect(() => {
     loadTagihan();
+    loadClasses();
   }, []);
 
   const loadTagihan = async () => {
@@ -76,6 +98,20 @@ export default function Tagihan() {
     }
   };
 
+  const loadClasses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('classes')
+        .select('id, name, level')
+        .order('level', { ascending: true })
+        .order('name', { ascending: true });
+      if (error) return;
+      setClasses(data || []);
+    } catch (e) {
+      // ignore
+    }
+  };
+
   const filteredTagihan = tagihan.filter(item =>
     item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     item.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -94,9 +130,116 @@ export default function Tagihan() {
     setFormOpen(true);
   };
 
+  const openAssign = (item: TagihanData) => {
+    setAssignBill(item);
+    setAssignTarget("semua");
+    setSelectedClassId("");
+    setAssignOpen(true);
+    setRepeatMonthly(false);
+    setMonthsCount(12);
+    const d = new Date();
+    setStartDate(new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0,10));
+    setOverwriteExisting(false);
+  };
+
   const handleDelete = (id: string) => {
     setTagihanToDelete(id);
     setDeleteDialogOpen(true);
+  };
+
+  const handleAssignConfirm = async () => {
+    if (!assignBill) return;
+    try {
+      setAssignLoading(true);
+      // 1) Ambil siswa target
+      let studentQuery = supabase
+        .from('students')
+        .select('id');
+      if (assignTarget === 'kelas' && selectedClassId) {
+        studentQuery = studentQuery.eq('class_id', selectedClassId);
+      }
+      const { data: students, error: studentsErr } = await studentQuery;
+      if (studentsErr) throw studentsErr;
+      const targetStudentIds = (students || []).map((s: any) => s.id);
+      if (targetStudentIds.length === 0) {
+        toast({ title: "Info", description: "Tidak ada siswa pada target yang dipilih" });
+        return;
+      }
+
+      // 2) Bentuk daftar due date (bulanan atau tunggal)
+      const start = new Date(startDate);
+      const months: string[] = [];
+      const total = repeatMonthly ? Math.max(1, Math.min(24, monthsCount)) : 1;
+      for (let i = 0; i < total; i++) {
+        const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
+        months.push(new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0,10));
+      }
+
+      // 3) Ambil existing student_bills untuk rentang bulan ini
+      const minDate = months[0];
+      const maxDate = months[months.length - 1];
+      const { data: existing, error: existErr } = await supabase
+        .from('student_bills')
+        .select('id, student_id, due_date')
+        .eq('bill_id', assignBill.id)
+        .in('student_id', targetStudentIds)
+        .gte('due_date', minDate)
+        .lte('due_date', maxDate);
+      if (existErr) throw existErr;
+      const existingMap = new Map<string, any>(); // key: studentId-YYYY-MM
+      (existing || []).forEach((row: any) => {
+        const ym = row.due_date ? row.due_date.slice(0,7) : '';
+        existingMap.set(`${row.student_id}-${ym}`, row);
+      });
+
+      // 4) Susun insert & update
+      const toInsert: any[] = [];
+      const toUpdate: { id: string; amount: number; due_date: string }[] = [];
+      for (const sid of targetStudentIds) {
+        for (const m of months) {
+          const ym = m.slice(0,7);
+          const key = `${sid}-${ym}`;
+          const found = existingMap.get(key);
+          if (found) {
+            if (overwriteExisting) {
+              toUpdate.push({ id: found.id, amount: assignBill.amount, due_date: m });
+            }
+          } else {
+            toInsert.push({
+              student_id: sid,
+              bill_id: assignBill.id,
+              amount: assignBill.amount,
+              due_date: m,
+              status: 'pending',
+            });
+          }
+        }
+      }
+
+      if (toInsert.length > 0) {
+        const { error: insertErr } = await supabase.from('student_bills').insert(toInsert);
+        if (insertErr) throw insertErr;
+      }
+      if (toUpdate.length > 0) {
+        // lakukan update satu per satu agar sederhana
+        for (const row of toUpdate) {
+          const { error: updErr } = await supabase
+            .from('student_bills')
+            .update({ amount: row.amount, due_date: row.due_date, status: 'pending' })
+            .eq('id', row.id);
+          if (updErr) throw updErr;
+        }
+      }
+
+      const affected = toInsert.length + toUpdate.length;
+      toast({ title: "Berhasil", description: `Berhasil menetapkan ${affected} tagihan bulanan` });
+      setAssignOpen(false);
+    } catch (error) {
+      console.error('Error assigning bills:', error);
+      toast({ title: "Error", description: "Gagal menetapkan tagihan", variant: "destructive" });
+    } finally {
+      setAssignLoading(false);
+    }
   };
 
   const confirmDelete = async () => {
@@ -282,6 +425,9 @@ export default function Tagihan() {
                         <Button variant="ghost" size="sm" onClick={() => handleEdit(item)}>
                           <Edit className="h-4 w-4" />
                         </Button>
+                        <Button variant="ghost" size="sm" onClick={() => openAssign(item)}>
+                          Tetapkan
+                        </Button>
                         <Button variant="ghost" size="sm" onClick={() => handleDelete(item.id)}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -317,6 +463,74 @@ export default function Tagihan() {
         description="Apakah Anda yakin ingin menghapus tagihan ini? Tindakan ini tidak dapat dibatalkan."
         onConfirm={confirmDelete}
       />
+
+      <Dialog open={assignOpen} onOpenChange={setAssignOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Tetapkan Tagihan</DialogTitle>
+            <DialogDescription>Pilih target dan opsi pengulangan untuk menetapkan tagihan ke siswa.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Pilih Target</Label>
+              <Select value={assignTarget} onValueChange={(v: any) => setAssignTarget(v)}>
+                <SelectTrigger className="mt-2">
+                  <SelectValue placeholder="Pilih target" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="semua">Semua Siswa</SelectItem>
+                  <SelectItem value="kelas">Per Kelas</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {assignTarget === 'kelas' && (
+              <div>
+                <Label>Pilih Kelas</Label>
+                <Select value={selectedClassId} onValueChange={setSelectedClassId}>
+                  <SelectTrigger className="mt-2">
+                    <SelectValue placeholder="Pilih kelas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {classes.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.level}. {c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Checkbox id="repeatMonthly" checked={repeatMonthly} onCheckedChange={(v) => setRepeatMonthly(!!v)} />
+                <Label htmlFor="repeatMonthly">Ulangi bulanan</Label>
+              </div>
+              {repeatMonthly && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <Label>Tanggal mulai</Label>
+                    <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Jumlah bulan</Label>
+                    <Input type="number" min={1} max={24} value={monthsCount} onChange={(e) => setMonthsCount(parseInt(e.target.value) || 1)} />
+                  </div>
+                  <div className="flex items-end">
+                    <div className="flex items-center gap-2">
+                      <Checkbox id="overwriteExisting" checked={overwriteExisting} onCheckedChange={(v) => setOverwriteExisting(!!v)} />
+                      <Label htmlFor="overwriteExisting">Timpa jika sudah ada</Label>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="ghost" onClick={() => setAssignOpen(false)}>Batal</Button>
+              <Button onClick={handleAssignConfirm} disabled={assignLoading || (assignTarget === 'kelas' && !selectedClassId)}>
+                {assignLoading ? 'Memproses...' : 'Tetapkan'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useEffect, useState } from "react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,6 +35,20 @@ export function TagihanForm({ open, onOpenChange, onSubmit, initialData, mode }:
   
   const { toast } = useToast();
 
+  // Sinkronkan form saat initialData berubah (misal ketika membuka Edit untuk item berbeda)
+  useEffect(() => {
+    if (open) {
+      setFormData({
+        kode: initialData?.kode || "",
+        nama: initialData?.nama || "",
+        nominal: initialData?.nominal || 0,
+        kategori: initialData?.kategori || "SPP",
+        status: initialData?.status || "Aktif",
+        ...(initialData?.id && { id: initialData.id })
+      });
+    }
+  }, [open, initialData]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -67,6 +81,7 @@ export function TagihanForm({ open, onOpenChange, onSubmit, initialData, mode }:
           <DialogTitle>
             {mode === "create" ? "Tambah Tagihan" : "Edit Tagihan"}
           </DialogTitle>
+          <DialogDescription>Isi data tagihan kemudian simpan untuk menyimpan perubahan.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">

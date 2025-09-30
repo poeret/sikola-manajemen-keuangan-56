@@ -48,11 +48,11 @@ interface SiswaData {
 }
 
 interface TagihanData {
-  id: string;
-  name: string;
+  id: string; // student_bill id
+  name: string; // joined from bills.name
   amount: number;
   due_date: string | null;
-  status: string | null;
+  status: string | null; // payment_status enum (pending|paid|overdue|cancelled)
 }
 
 export default function PembayaranSPP() {
@@ -69,7 +69,6 @@ export default function PembayaranSPP() {
   // Load data from database
   useEffect(() => {
     loadSiswa();
-    loadTagihan();
   }, []);
 
   const loadSiswa = async () => {
@@ -100,29 +99,39 @@ export default function PembayaranSPP() {
     }
   };
 
-  const loadTagihan = async () => {
+  const loadTagihan = async (studentId: string) => {
     try {
+      setLoading(true);
       const { data, error } = await supabase
-        .from('bills')
-        .select('id, name, amount, due_date, status')
+        .from('student_bills')
+        .select('id, amount, due_date, status, bills(name)')
+        .eq('student_id', studentId)
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Error loading bills:', error);
+        console.error('Error loading student bills:', error);
         toast({
           title: "Error",
-          description: "Gagal memuat data tagihan",
+          description: "Gagal memuat data tagihan siswa",
           variant: "destructive"
         });
         return;
       }
 
-      setTagihan(data || []);
+      const mapped: TagihanData[] = (data || []).map((row: any) => ({
+        id: row.id,
+        name: row.bills?.name || 'Tagihan',
+        amount: row.amount,
+        due_date: row.due_date,
+        status: row.status,
+      }));
+
+      setTagihan(mapped);
     } catch (error) {
-      console.error('Error loading bills:', error);
+      console.error('Error loading student bills:', error);
       toast({
         title: "Error",
-        description: "Gagal memuat data tagihan",
+        description: "Gagal memuat data tagihan siswa",
         variant: "destructive"
       });
     } finally {
@@ -132,6 +141,23 @@ export default function PembayaranSPP() {
   const [catatan, setCatatan] = useState("");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
+  const getStatusLabel = (status: string | null) => {
+    switch (status) {
+      case 'paid':
+        return 'Lunas';
+      case 'pending':
+        return 'Menunggu';
+      case 'overdue':
+        return 'Jatuh Tempo';
+      case 'cancelled':
+        return 'Dibatalkan';
+      default:
+        return 'Belum Bayar';
+    }
+  };
+
+  const isSelectable = (status: string | null) => status !== 'paid' && status !== 'cancelled';
+
   const handleSearch = () => {
     if (searchQuery.trim()) {
       const foundSiswa = siswa.find(s => 
@@ -139,6 +165,11 @@ export default function PembayaranSPP() {
         s.name.toLowerCase().includes(searchQuery.toLowerCase())
       );
       setSelectedSiswa(foundSiswa || null);
+      if (foundSiswa) {
+        loadTagihan(foundSiswa.id);
+      } else {
+        setTagihan([]);
+      }
     }
   };
 
@@ -159,35 +190,32 @@ export default function PembayaranSPP() {
 
   const handlePayment = async () => {
     try {
-      // Create payment record
-      const { data: payment, error } = await supabase
-        .from('payments')
-        .insert({
-          student_id: selectedSiswa?.id,
-          amount: parseFloat(jumlahBayar),
-          payment_method: metodePembayaran,
-          notes: catatan,
-          status: 'completed'
-        })
-        .select()
-        .single();
+      // For each selected student_bill, create a payment and mark as paid
+      for (const studentBillId of selectedTagihan) {
+        const current = tagihan.find(t => t.id === studentBillId);
+        const payAmount = current?.amount || 0;
 
-      if (error) {
-        console.error('Error creating payment:', error);
-        toast({
-          title: "Error",
-          description: "Gagal memproses pembayaran",
-          variant: "destructive"
-        });
-        return;
-      }
+        const { error: payErr } = await supabase
+          .from('payments')
+          .insert({
+            student_bill_id: studentBillId,
+            amount: payAmount,
+            payment_method: metodePembayaran,
+            notes: catatan,
+          });
+        if (payErr) {
+          console.error('Error creating payment:', payErr);
+          throw payErr;
+        }
 
-      // Update bill status
-      for (const tagihanId of selectedTagihan) {
-        await supabase
-          .from('bills')
+        const { error: updErr } = await supabase
+          .from('student_bills')
           .update({ status: 'paid' })
-          .eq('id', tagihanId);
+          .eq('id', studentBillId);
+        if (updErr) {
+          console.error('Error updating student bill status:', updErr);
+          throw updErr;
+        }
       }
 
       setShowSuccessModal(true);
@@ -203,6 +231,9 @@ export default function PembayaranSPP() {
         setMetodePembayaran("");
         setCatatan("");
         setShowSuccessModal(false);
+        if (selectedSiswa) {
+          loadTagihan(selectedSiswa.id);
+        }
         setSelectedSiswa(null);
         setSearchQuery("");
       }, 3000);
@@ -340,7 +371,7 @@ export default function PembayaranSPP() {
                   tagihan.map((tagihanItem) => (
                     <TableRow key={tagihanItem.id}>
                       <TableCell>
-                        {tagihanItem.status !== "paid" && (
+                        {isSelectable(tagihanItem.status) && (
                           <Checkbox
                             checked={selectedTagihan.includes(tagihanItem.id)}
                             onCheckedChange={(checked) => 
@@ -357,7 +388,7 @@ export default function PembayaranSPP() {
                           tagihanItem.status === "paid" ? "default" : "destructive"
                         }>
                           {tagihanItem.status === "paid" && <CheckCircle className="h-3 w-3 mr-1" />}
-                          {tagihanItem.status === "paid" ? "Lunas" : "Belum Bayar"}
+                          {getStatusLabel(tagihanItem.status)}
                         </Badge>
                       </TableCell>
                       <TableCell>
