@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface TagihanData {
   id?: string;
@@ -34,6 +35,7 @@ export function TagihanForm({ open, onOpenChange, onSubmit, initialData, mode }:
   });
   
   const { toast } = useToast();
+  const [kategoriOptions, setKategoriOptions] = useState<Array<{ id: string; name: string }>>([]);
 
   // Sinkronkan form saat initialData berubah (misal ketika membuka Edit untuk item berbeda)
   useEffect(() => {
@@ -42,12 +44,27 @@ export function TagihanForm({ open, onOpenChange, onSubmit, initialData, mode }:
         kode: initialData?.kode || "",
         nama: initialData?.nama || "",
         nominal: initialData?.nominal || 0,
-        kategori: initialData?.kategori || "SPP",
+        kategori: initialData?.kategori || "",
         status: initialData?.status || "Aktif",
         ...(initialData?.id && { id: initialData.id })
       });
     }
   }, [open, initialData]);
+
+  // Load kategori dari master financial_categories (khusus type income)
+  useEffect(() => {
+    const loadKategori = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('financial_categories')
+          .select('id, name, type, status')
+          .eq('type', 'income')
+          .in('status', ['active', 'Aktif']);
+        if (!error) setKategoriOptions((data || []).map((d: any) => ({ id: d.id, name: d.name })));
+      } catch {}
+    };
+    if (open) loadKategori();
+  }, [open]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,18 +131,23 @@ export function TagihanForm({ open, onOpenChange, onSubmit, initialData, mode }:
           </div>
           <div className="space-y-2">
             <Label htmlFor="kategori">Kategori</Label>
-            <Select value={formData.kategori} onValueChange={(value) => setFormData({ ...formData, kategori: value })}>
+            <Select value={formData.kategori || undefined} onValueChange={(value) => setFormData({ ...formData, kategori: value })}>
               <SelectTrigger>
                 <SelectValue placeholder="Pilih kategori" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="SPP">SPP</SelectItem>
-                <SelectItem value="Ujian">Ujian</SelectItem>
-                <SelectItem value="Seragam">Seragam</SelectItem>
-                <SelectItem value="Buku">Buku</SelectItem>
-                <SelectItem value="Kegiatan">Kegiatan</SelectItem>
+                {kategoriOptions.length === 0 ? (
+                  <SelectItem value="no-data" disabled>Tidak ada kategori</SelectItem>
+                ) : (
+                  kategoriOptions.map((opt) => (
+                    <SelectItem key={opt.id} value={opt.name}>{opt.name}</SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
+            <div className="text-xs text-muted-foreground">
+              Tidak menemukan kategori? Kelola di <a className="underline" href="/kategori-keuangan" target="_blank" rel="noreferrer">Kategori Keuangan</a>.
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="status">Status</Label>

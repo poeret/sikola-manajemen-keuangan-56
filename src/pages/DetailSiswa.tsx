@@ -20,7 +20,7 @@ interface StudentBillRow {
   amount: number;
   due_date: string | null;
   status: string | null;
-  bills?: { name?: string | null; code?: string | null } | null;
+  bills?: { name?: string | null; code?: string | null; academic_year_id?: string | null } | null;
 }
 
 const statusToBadge = (status: string | null) => {
@@ -40,6 +40,8 @@ export default function DetailSiswa() {
   const { id } = useParams();
   const [student, setStudent] = useState<StudentDetailData | null>(null);
   const [bills, setBills] = useState<StudentBillRow[]>([]);
+  const [summary, setSummary] = useState<{ prevDue: number; currentDue: number; totalDue: number }>({ prevDue: 0, currentDue: 0, totalDue: 0 });
+  const [displayBills, setDisplayBills] = useState<StudentBillRow[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -70,11 +72,40 @@ export default function DetailSiswa() {
       setLoading(true);
       const { data, error } = await supabase
         .from('student_bills')
-        .select('id, amount, due_date, status, bills(name, code)')
+        .select('id, amount, due_date, status, bills(name, code, academic_year_id)')
         .eq('student_id', studentId)
         .order('due_date', { ascending: true });
       if (error) throw error;
-      setBills((data || []) as any);
+      const rows = (data || []) as any as StudentBillRow[];
+      setBills(rows);
+      // Ambil TA aktif beserta rentang tanggal untuk klasifikasi berdasarkan due_date
+      const { data: ayList } = await supabase
+        .from('academic_years')
+        .select('id, code, start_date, end_date, is_active');
+      const active = (ayList || []).find((y: any) => y.is_active);
+      let prevDue = 0; let currentDue = 0;
+      const inActiveRange = (d: string | null) => {
+        if (!active || !d) return false;
+        const dt = new Date(d).getTime();
+        const start = new Date(active.start_date).getTime();
+        const end = new Date(active.end_date).getTime();
+        return dt >= start && dt <= end;
+      };
+      const currentYearBills: StudentBillRow[] = [];
+      for (const r of rows) {
+        if (r.status === 'paid' || r.status === 'cancelled') continue;
+        const billYearId = r.bills?.academic_year_id || null;
+        const isInActiveByBill = !!(active && billYearId && billYearId === active.id);
+        const isInActiveByDate = inActiveRange(r.due_date);
+        if (isInActiveByBill || (!billYearId && isInActiveByDate)) {
+          currentDue += r.amount;
+          currentYearBills.push(r);
+        } else {
+          prevDue += r.amount;
+        }
+      }
+      setDisplayBills(active ? currentYearBills : rows);
+      setSummary({ prevDue, currentDue, totalDue: prevDue + currentDue });
     } catch (err) {
       console.error('Error loading student bills:', err);
       toast({ title: 'Error', description: 'Gagal memuat daftar tagihan', variant: 'destructive' });
@@ -126,6 +157,20 @@ export default function DetailSiswa() {
           <CardTitle>Daftar Tagihan Siswa</CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+            <div className="p-3 rounded-md bg-amber-50">
+              <div className="text-xs text-muted-foreground">Tunggakan TA sebelumnya</div>
+              <div className="font-bold">Rp {summary.prevDue.toLocaleString('id-ID')}</div>
+            </div>
+            <div className="p-3 rounded-md bg-blue-50">
+              <div className="text-xs text-muted-foreground">Tagihan TA berjalan</div>
+              <div className="font-bold">Rp {summary.currentDue.toLocaleString('id-ID')}</div>
+            </div>
+            <div className="p-3 rounded-md bg-green-50">
+              <div className="text-xs text-muted-foreground">Total wajib dibayar</div>
+              <div className="font-bold">Rp {summary.totalDue.toLocaleString('id-ID')}</div>
+            </div>
+          </div>
           <Table>
             <TableHeader>
               <TableRow>
@@ -141,12 +186,12 @@ export default function DetailSiswa() {
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-8">Memuat data...</TableCell>
                 </TableRow>
-              ) : bills.length === 0 ? (
+              ) : displayBills.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-8">Belum ada tagihan</TableCell>
                 </TableRow>
               ) : (
-                bills.map((row) => (
+                displayBills.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell className="font-mono text-sm">{row.bills?.code || '-'}</TableCell>
                     <TableCell>{row.bills?.name || '-'}</TableCell>

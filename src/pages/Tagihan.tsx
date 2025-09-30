@@ -51,6 +51,8 @@ export default function Tagihan() {
   const [classes, setClasses] = useState<{ id: string; name: string; level: number }[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<string>("");
   const [assignLoading, setAssignLoading] = useState(false);
+  const [academicYears, setAcademicYears] = useState<Array<{ id: string; code: string; description: string }>>([]);
+  const [selectedAcademicYearId, setSelectedAcademicYearId] = useState<string>("");
   // Generator bulanan
   const [repeatMonthly, setRepeatMonthly] = useState<boolean>(false);
   const [monthsCount, setMonthsCount] = useState<number>(12);
@@ -60,11 +62,24 @@ export default function Tagihan() {
     return iso;
   });
   const [overwriteExisting, setOverwriteExisting] = useState<boolean>(false);
+  // Bill monthly eligibility (show/hide Kelola Bulanan)
+  const [monthlyEligible, setMonthlyEligible] = useState<Record<string, boolean>>({});
+
+  // Kelola bulanan (edit per bulan di TA aktif)
+  const [manageOpen, setManageOpen] = useState(false);
+  const [manageBill, setManageBill] = useState<TagihanData | null>(null);
+  const [manageTarget, setManageTarget] = useState<"all" | "kelas">("all");
+  const [manageLevel, setManageLevel] = useState<number | "_all">("_all");
+  const [manageClassId, setManageClassId] = useState<string>("_all");
+  const [manageRows, setManageRows] = useState<Array<{ due_date: string; amount: number }>>([]);
+  const [manageLoading, setManageLoading] = useState(false);
+  const [manageSaving, setManageSaving] = useState(false);
 
   // Load data from database
   useEffect(() => {
     loadTagihan();
     loadClasses();
+    loadAcademicYears();
   }, []);
 
   const loadTagihan = async () => {
@@ -85,7 +100,9 @@ export default function Tagihan() {
         return;
       }
 
-      setTagihan(data || []);
+      const list = data || [];
+      setTagihan(list);
+      void computeMonthlyEligibility(list);
     } catch (error) {
       console.error('Error loading bills:', error);
       toast({
@@ -95,6 +112,40 @@ export default function Tagihan() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const computeMonthlyEligibility = async (billsList: TagihanData[]) => {
+    try {
+      const billIds = billsList.map(b => b.id);
+      if (billIds.length === 0) { setMonthlyEligible({}); return; }
+      // get active academic year range
+      const { data: ay } = await supabase
+        .from('academic_years')
+        .select('start_date, end_date, is_active')
+        .eq('is_active', true)
+        .limit(1)
+        .single();
+      let minDate: string | null = ay?.start_date || null;
+      let maxDate: string | null = ay?.end_date || null;
+      let q = supabase
+        .from('student_bills')
+        .select('bill_id, due_date')
+        .in('bill_id', billIds);
+      if (minDate && maxDate) q = q.gte('due_date', minDate).lte('due_date', maxDate);
+      const { data } = await q;
+      const map: Record<string, Set<string>> = {};
+      (data || []).forEach((r: any) => {
+        const ym = r.due_date ? String(r.due_date).slice(0,7) : '';
+        if (!ym) return;
+        if (!map[r.bill_id]) map[r.bill_id] = new Set();
+        map[r.bill_id].add(ym);
+      });
+      const elig: Record<string, boolean> = {};
+      billIds.forEach(id => { elig[id] = (map[id]?.size || 0) >= 2; });
+      setMonthlyEligible(elig);
+    } catch {
+      // silent
     }
   };
 
@@ -110,6 +161,16 @@ export default function Tagihan() {
     } catch (e) {
       // ignore
     }
+  };
+
+  const loadAcademicYears = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('academic_years')
+        .select('id, code, description')
+        .order('start_date', { ascending: false });
+      if (!error) setAcademicYears(data as any || []);
+    } catch {}
   };
 
   const filteredTagihan = tagihan.filter(item =>
@@ -142,6 +203,113 @@ export default function Tagihan() {
     setOverwriteExisting(false);
   };
 
+  const openManage = (item: TagihanData) => {
+    setManageBill(item);
+    setManageTarget("all");
+    setManageLevel("_all");
+    setManageClassId("_all");
+    setManageRows([]);
+    setManageOpen(true);
+    void loadManageRows(item.id, "_all");
+  };
+
+  const loadManageRows = async (billId: string, classId: string) => {
+    try {
+      setManageLoading(true);
+      // Ambil TA aktif untuk rentang tanggal
+      const { data: ay } = await supabase.from('academic_years').select('id, start_date, end_date, is_active').eq('is_active', true).limit(1).single();
+      let minDate = null as string | null;
+      let maxDate = null as string | null;
+      if (ay) {
+        minDate = ay.start_date;
+        maxDate = ay.end_date;
+      }
+      // Bentuk daftar bulan TA aktif (default untuk kasus berulang)
+      const months: string[] = [];
+      if (minDate && maxDate) {
+        const start = new Date(minDate);
+        const end = new Date(maxDate);
+        const fmt = (y: number, m: number) => `${y}-${String(m + 1).padStart(2, '0')}-01`;
+        for (let y = start.getFullYear(), m = start.getMonth(); y < end.getFullYear() || (y === end.getFullYear() && m <= end.getMonth()); ) {
+          months.push(fmt(y, m));
+          m++;
+          if (m > 11) { m = 0; y++; }
+        }
+      }
+      // Ambil daftar due_date yang ada pada TA aktif untuk bill ini (mencakup berulang maupun tidak)
+      let amountsByMonth: Record<string, number> = {};
+      let existingDates: string[] = [];
+      if (minDate && maxDate) {
+        const { data, error } = await supabase
+          .from('student_bills')
+          .select('amount, due_date')
+          .eq('bill_id', billId)
+          .gte('due_date', minDate)
+          .lte('due_date', maxDate)
+          .order('due_date', { ascending: true });
+        if (!error) {
+          const byDate: Record<string, Record<number, number>> = {};
+          (data || []).forEach((r: any) => {
+            if (!r.due_date) return;
+            const date = r.due_date as string;
+            const amt = Number(r.amount) || 0;
+            byDate[date] ||= {};
+            byDate[date][amt] = (byDate[date][amt] || 0) + 1;
+          });
+          existingDates = Object.keys(byDate).sort();
+          Object.entries(byDate).forEach(([date, counts]) => {
+            let bestAmt = 0; let bestCnt = -1;
+            Object.entries(counts).forEach(([amtStr, cnt]) => {
+              const amt = Number(amtStr);
+              if (cnt > bestCnt) { bestCnt = cnt; bestAmt = amt; }
+            });
+            amountsByMonth[date] = bestAmt;
+          });
+        }
+      }
+      const defaultAmount = manageBill?.amount || 0;
+      // Gunakan existingDates jika ada (untuk kasus tidak berulang), kalau tidak gunakan seluruh bulan TA
+      const datesSource = existingDates.length > 0 ? existingDates : months;
+      const rows = datesSource.map((d) => ({ due_date: d, amount: amountsByMonth[d] ?? defaultAmount }));
+      setManageRows(rows);
+    } catch (e) {
+      console.error('Error loading monthly bills:', e);
+      toast({ title: 'Error', description: 'Gagal memuat tagihan bulanan', variant: 'destructive' });
+    } finally {
+      setManageLoading(false);
+    }
+  };
+
+  const saveManageChanges = async () => {
+    try {
+      setManageSaving(true);
+      // Target siswa: semua atau per kelas
+      let targetStudentIds: string[] | null = null;
+      if (manageTarget === 'kelas' && manageClassId && manageClassId !== '_all') {
+        const { data: studs, error: studErr } = await supabase.from('students').select('id').eq('class_id', manageClassId);
+        if (studErr) throw studErr;
+        targetStudentIds = (studs || []).map((s: any) => s.id);
+      }
+      // Update per bulan
+      for (const row of manageRows) {
+        let q = supabase.from('student_bills').update({ amount: row.amount }).eq('bill_id', manageBill?.id as any).eq('due_date', row.due_date);
+        if (targetStudentIds) {
+          if (targetStudentIds.length === 0) continue;
+          q = q.in('student_id', targetStudentIds);
+        }
+        const { error } = await q;
+        if (error) throw error;
+      }
+      toast({ title: 'Berhasil', description: 'Perubahan nominal berhasil disimpan' });
+      setManageOpen(false);
+    } catch (e) {
+      console.error('Error saving monthly bills:', e);
+      toast({ title: 'Error', description: 'Gagal menyimpan perubahan', variant: 'destructive' });
+    } finally {
+      setManageSaving(false);
+    }
+  };
+
   const handleDelete = (id: string) => {
     setTagihanToDelete(id);
     setDeleteDialogOpen(true);
@@ -169,10 +337,15 @@ export default function Tagihan() {
       // 2) Bentuk daftar due date (bulanan atau tunggal)
       const start = new Date(startDate);
       const months: string[] = [];
+      const fmt = (y: number, m: number, day: number = 1) => {
+        const mm = String(m + 1).padStart(2, '0');
+        const dd = String(day).padStart(2, '0');
+        return `${y}-${mm}-${dd}`;
+      };
       const total = repeatMonthly ? Math.max(1, Math.min(24, monthsCount)) : 1;
       for (let i = 0; i < total; i++) {
         const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
-        months.push(new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0,10));
+        months.push(fmt(d.getFullYear(), d.getMonth(), 1));
       }
 
       // 3) Ambil existing student_bills untuk rentang bulan ini
@@ -216,9 +389,21 @@ export default function Tagihan() {
         }
       }
 
+      // Early exit info jika tidak ada perubahan yang perlu dilakukan
+      if (toInsert.length === 0 && toUpdate.length === 0) {
+        toast({ title: "Info", description: "Semua tagihan untuk periode tersebut sudah ditetapkan" });
+        setAssignOpen(false);
+        return;
+      }
+
       if (toInsert.length > 0) {
-        const { error: insertErr } = await supabase.from('student_bills').insert(toInsert);
-        if (insertErr) throw insertErr;
+        // Lakukan insert dalam batch agar request tidak terlalu besar
+        const chunkSize = 500;
+        for (let i = 0; i < toInsert.length; i += chunkSize) {
+          const chunk = toInsert.slice(i, i + chunkSize);
+          const { error: insertErr } = await supabase.from('student_bills').insert(chunk);
+          if (insertErr) throw insertErr;
+        }
       }
       if (toUpdate.length > 0) {
         // lakukan update satu per satu agar sederhana
@@ -428,6 +613,11 @@ export default function Tagihan() {
                         <Button variant="ghost" size="sm" onClick={() => openAssign(item)}>
                           Tetapkan
                         </Button>
+                        {monthlyEligible[item.id] && (
+                          <Button variant="ghost" size="sm" onClick={() => openManage(item)}>
+                            Kelola Bulanan
+                          </Button>
+                        )}
                         <Button variant="ghost" size="sm" onClick={() => handleDelete(item.id)}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -483,6 +673,19 @@ export default function Tagihan() {
                 </SelectContent>
               </Select>
             </div>
+            <div>
+              <Label>Tahun Ajaran</Label>
+              <Select value={selectedAcademicYearId} onValueChange={setSelectedAcademicYearId}>
+                <SelectTrigger className="mt-2">
+                  <SelectValue placeholder="Pilih tahun ajaran (opsional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {academicYears.map((y) => (
+                    <SelectItem key={y.id} value={y.id}>{y.code} - {y.description}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             {assignTarget === 'kelas' && (
               <div>
                 <Label>Pilih Kelas</Label>
@@ -527,6 +730,101 @@ export default function Tagihan() {
               <Button onClick={handleAssignConfirm} disabled={assignLoading || (assignTarget === 'kelas' && !selectedClassId)}>
                 {assignLoading ? 'Memproses...' : 'Tetapkan'}
               </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Manage Monthly Bills Dialog */}
+      <Dialog open={manageOpen} onOpenChange={setManageOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Kelola Tagihan Bulanan (TA berjalan)</DialogTitle>
+            <DialogDescription>Ubah nominal per bulan untuk siswa pada Tahun Ajaran aktif.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <Label>Bill</Label>
+                <div className="mt-2 text-sm font-medium">{manageBill?.name} ({manageBill?.code})</div>
+              </div>
+              <div>
+                <Label>Target</Label>
+                <Select value={manageTarget} onValueChange={(v: any) => setManageTarget(v)}>
+                  <SelectTrigger className="mt-2">
+                    <SelectValue placeholder="Pilih target" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua siswa</SelectItem>
+                    <SelectItem value="kelas">Per Kelas</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {manageTarget === 'kelas' && (
+                <>
+                  <div>
+                    <Label>Level</Label>
+                    <Select value={String(manageLevel)} onValueChange={(v) => setManageLevel(v === '_all' ? '_all' : parseInt(v))}>
+                      <SelectTrigger className="mt-2">
+                        <SelectValue placeholder="Semua level" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_all">Semua level</SelectItem>
+                        {[...new Set(classes.map(c => c.level))].map((lvl) => (
+                          <SelectItem key={lvl} value={String(lvl)}>{lvl}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Kelas</Label>
+                    <Select value={manageClassId} onValueChange={(v) => { setManageClassId(v); if (manageBill) void loadManageRows(manageBill.id, v); }}>
+                      <SelectTrigger className="mt-2">
+                        <SelectValue placeholder="Semua kelas" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_all">Semua kelas</SelectItem>
+                        {classes.filter(c => manageLevel === '_all' || c.level === manageLevel).map((c) => (
+                          <SelectItem key={c.id} value={c.id}>{c.level}. {c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="border rounded-md max-h-[60vh] overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Periode</TableHead>
+                    <TableHead>Nominal</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {manageLoading ? (
+                    <TableRow><TableCell colSpan={3} className="text-center py-6">Memuat...</TableCell></TableRow>
+                  ) : manageRows.length === 0 ? (
+                    <TableRow><TableCell colSpan={3} className="text-center py-6">Tidak ada data</TableCell></TableRow>
+                  ) : (
+                    manageRows.map((r, idx) => (
+                      <TableRow key={r.due_date}>
+                        <TableCell>{new Date(r.due_date).toLocaleDateString('id-ID', { year: 'numeric', month: 'long' })}</TableCell>
+                        <TableCell>
+                          <Input type="number" value={r.amount} onChange={(e) => {
+                            const val = parseInt(e.target.value) || 0;
+                            setManageRows(prev => prev.map((x, i) => i === idx ? { ...x, amount: val } : x));
+                          }} />
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+            <div className="flex justify-end gap-2 sticky bottom-0 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-t pt-3">
+              <Button variant="outline" onClick={() => setManageOpen(false)}>Batal</Button>
+              <Button onClick={saveManageChanges} disabled={manageSaving || manageLoading}>{manageSaving ? 'Menyimpan...' : 'Simpan Perubahan'}</Button>
             </div>
           </div>
         </DialogContent>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,7 +34,7 @@ export function KelasForm({ open, onOpenChange, onSubmit, initialData, mode, ins
     nama: "",
     level: 1,
     waliKelas: "",
-    kapasitas: 0,
+    kapasitas: 1,
     institution_id: ""
   });
 
@@ -46,7 +46,7 @@ export function KelasForm({ open, onOpenChange, onSubmit, initialData, mode, ins
         nama: initialData.nama || "",
         level: initialData.level || 1,
         waliKelas: initialData.waliKelas || "",
-        kapasitas: initialData.kapasitas || 0,
+        kapasitas: typeof initialData.kapasitas === 'number' ? initialData.kapasitas : 1,
         institution_id: initialData.institution_id || "",
         ...(initialData.id && { id: initialData.id })
       });
@@ -55,7 +55,7 @@ export function KelasForm({ open, onOpenChange, onSubmit, initialData, mode, ins
         nama: "",
         level: 1,
         waliKelas: "",
-        kapasitas: 0,
+        kapasitas: 1,
         institution_id: ""
       });
     }
@@ -66,7 +66,7 @@ export function KelasForm({ open, onOpenChange, onSubmit, initialData, mode, ins
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.nama || !formData.waliKelas) {
+    if (!formData.nama || formData.level < 1 || formData.kapasitas < 0) {
       toast({
         title: "Error",
         description: "Mohon lengkapi semua field yang diperlukan",
@@ -83,7 +83,8 @@ export function KelasForm({ open, onOpenChange, onSubmit, initialData, mode, ins
       nama: "",
       level: 1,
       waliKelas: "",
-      kapasitas: 0
+      kapasitas: 1,
+      institution_id: ""
     });
   };
 
@@ -94,6 +95,9 @@ export function KelasForm({ open, onOpenChange, onSubmit, initialData, mode, ins
           <DialogTitle>
             {mode === "create" ? "Tambah Kelas" : "Edit Kelas"}
           </DialogTitle>
+          <DialogDescription>
+            Isi nama, level, kapasitas, dan pilih lembaga untuk menyimpan data kelas.
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
@@ -131,9 +135,12 @@ export function KelasForm({ open, onOpenChange, onSubmit, initialData, mode, ins
             <Input
               id="kapasitas"
               type="number"
-              min="1"
+              min="0"
               value={formData.kapasitas}
-              onChange={(e) => setFormData({ ...formData, kapasitas: parseInt(e.target.value) || 0 })}
+              onChange={(e) => {
+                const n = parseInt(e.target.value, 10);
+                setFormData({ ...formData, kapasitas: Number.isNaN(n) ? 0 : Math.max(0, n) });
+              }}
               placeholder="32"
             />
           </div>

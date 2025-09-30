@@ -36,6 +36,11 @@ interface KelasData {
     principal: string | null;
     status: string | null;
   };
+  academic_years?: {
+    id: string;
+    code: string;
+    description: string;
+  } | null;
 }
 
 interface InstitutionData {
@@ -50,6 +55,7 @@ export default function Kelas() {
   const [searchQuery, setSearchQuery] = useState("");
   const [kelas, setKelas] = useState<KelasData[]>([]);
   const [institutions, setInstitutions] = useState<InstitutionData[]>([]);
+  const [academicYears, setAcademicYears] = useState<Array<{ id: string; code: string; description: string; is_active: boolean }>>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -71,6 +77,10 @@ export default function Kelas() {
   useEffect(() => {
     loadKelas();
     loadInstitutions();
+    loadAcademicYears();
+    const onRefresh = () => loadKelas();
+    window.addEventListener('app:refresh-classes', onRefresh);
+    return () => window.removeEventListener('app:refresh-classes', onRefresh);
   }, []);
 
   const loadKelas = async () => {
@@ -89,7 +99,8 @@ export default function Kelas() {
           capacity,
           current_students,
           created_at,
-          updated_at
+          updated_at,
+          academic_years ( id, code, description )
         `)
         .order('created_at', { ascending: false });
 
@@ -161,6 +172,36 @@ export default function Kelas() {
         description: "Gagal memuat data lembaga",
         variant: "destructive"
       });
+    }
+  };
+
+  const loadAcademicYears = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('academic_years')
+        .select('id, code, description, is_active')
+        .order('start_date', { ascending: false });
+      if (!error) setAcademicYears(data as any || []);
+    } catch {}
+  };
+
+  const setActiveYearForClassesWithoutTA = async () => {
+    try {
+      const active = academicYears.find(y => y.is_active);
+      if (!active) {
+        toast({ title: "Info", description: "Tidak ada Tahun Ajaran aktif", variant: "destructive" });
+        return;
+      }
+      const { error } = await supabase
+        .from('classes')
+        .update({ academic_year_id: active.id })
+        .is('academic_year_id', null);
+      if (error) throw error;
+      await loadKelas();
+      toast({ title: "Berhasil", description: `Kelas tanpa TA telah ditetapkan ke ${active.code}` });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error", description: "Gagal menetapkan TA aktif untuk kelas tanpa TA", variant: "destructive" });
     }
   };
 
@@ -720,6 +761,9 @@ export default function Kelas() {
             <Upload className="mr-2 h-4 w-4" />
             Import Excel
           </Button>
+          <Button variant="outline" onClick={setActiveYearForClassesWithoutTA}>
+            Tetapkan TA Aktif ke Kelas Tanpa TA
+          </Button>
         <Button onClick={handleAdd}>
           <Plus className="mr-2 h-4 w-4" />
           Tambah Kelas
@@ -750,6 +794,7 @@ export default function Kelas() {
               <TableRow>
                 <TableHead>Nama Kelas</TableHead>
                 <TableHead>Level</TableHead>
+              <TableHead>Tahun Ajaran</TableHead>
                 <TableHead>Lembaga</TableHead>
                 <TableHead>Wali Kelas</TableHead>
                 <TableHead>Jumlah Siswa</TableHead>
@@ -774,6 +819,7 @@ export default function Kelas() {
                 <TableRow key={item.id}>
                     <TableCell className="font-medium">{item.name}</TableCell>
                     <TableCell>Level {item.level}</TableCell>
+                  <TableCell>{item.academic_years ? item.academic_years.code : '-'}</TableCell>
                     <TableCell>
                       {item.institutions?.name || "-"}
                     </TableCell>

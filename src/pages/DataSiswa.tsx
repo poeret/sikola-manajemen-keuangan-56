@@ -73,6 +73,9 @@ export default function DataSiswa() {
   useEffect(() => {
     loadSiswa();
     loadInstitutions();
+    const onRefresh = () => loadSiswa();
+    window.addEventListener('app:refresh-students', onRefresh);
+    return () => window.removeEventListener('app:refresh-students', onRefresh);
   }, []);
 
   const loadSiswa = async () => {
